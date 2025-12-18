@@ -26,8 +26,8 @@ const envPath = getEnvPath();
 
 // Создаём .env файл с дефолтными значениями, если его нет
 if (!fs.existsSync(envPath)) {
-  const defaultEnvContent = `CITY=Minsk
-COUNTRY=Belarus
+  const defaultEnvContent = `CITY=New York City
+COUNTRY=United States
 LATITUDE=
 LONGITUDE=
 `;
@@ -148,7 +148,9 @@ function showApiErrors(): void {
  * Получает координаты по названию города и страны через Geocoding API
  */
 async function fetchCoordinatesByCity(city: string, country: string): Promise<{ latitude: number; longitude: number; cityName: string; countryName: string } | null> {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=1&language=ru`;
+  // Используем count=10 чтобы получить больше результатов и найти наиболее подходящий
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=10&language=ru`;
+  console.log({url});
   try {
     const res = await fetch(url);
     if (!res.ok) {
@@ -156,7 +158,15 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     }
     const data: any = await res.json();
     if (data && data.results && data.results.length > 0) {
-      const location = data.results[0];
+      // Ищем точное совпадение по названию города (регистронезависимо)
+      const cityLower = city.toLowerCase();
+      const exactMatch = data.results.find((loc: any) => 
+        loc.name && loc.name.toLowerCase() === cityLower
+      );
+      
+      // Если нашли точное совпадение, используем его, иначе берём первый результат
+      const location = exactMatch || data.results[0];
+      
       return {
         latitude: location.latitude,
         longitude: location.longitude,
