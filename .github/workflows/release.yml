@@ -31,21 +31,26 @@ jobs:
         node-version: '20'
         cache: 'npm'
 
+    - name: Install system dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
     - name: Install dependencies
       run: npm ci
 
     - name: Build TypeScript
       run: npm run build
 
-    - name: Setup electron-builder
-      uses: electron-userland/electron-builder-action@v1
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Rebuild native modules for Electron
+      run: npx electron-rebuild
 
     - name: Build application
       run: npm run build:electron
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CSC_IDENTITY_AUTO_DISCOVERY: false
 
     - name: Rename release files with datetime
       run: |
