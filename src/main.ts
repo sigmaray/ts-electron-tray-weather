@@ -295,25 +295,72 @@ async function updateTrayTemperature() {
     // На Linux/Windows может быть проигнорировано.
   }
 
-  const contextMenu = Menu.buildFromTemplate([
+  // Формируем пункты меню
+  const menuItems: any[] = [
     {
       label: `Текущая температура: ${label}`,
       enabled: false,
     },
     { type: "separator" },
-    {
-      label: "Обновить сейчас",
-      click: () => {
-        void updateTrayTemperature();
-      },
+  ];
+
+  // Добавляем время последнего обновления, если оно есть
+  if (lastUpdateTime) {
+    const hours = lastUpdateTime.getHours().toString().padStart(2, "0");
+    const minutes = lastUpdateTime.getMinutes().toString().padStart(2, "0");
+    const seconds = lastUpdateTime.getSeconds().toString().padStart(2, "0");
+    menuItems.push({
+      label: `Обновлено: ${hours}:${minutes}:${seconds}`,
+      enabled: false,
+    });
+    menuItems.push({ type: "separator" });
+  }
+
+  // Добавляем координаты, если они определены
+  if (LATITUDE !== null && LONGITUDE !== null) {
+    menuItems.push({
+      label: `Координаты: ${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}`,
+      enabled: false,
+    });
+    menuItems.push({
+      label: `LATITUDE: ${LATITUDE.toFixed(6)}`,
+      enabled: false,
+    });
+    menuItems.push({
+      label: `LONGITUDE: ${LONGITUDE.toFixed(6)}`,
+      enabled: false,
+    });
+    menuItems.push({ type: "separator" });
+  }
+
+  // Добавляем город и страну, если они доступны
+  if (cityName && countryName) {
+    menuItems.push({
+      label: `Город: ${cityName}`,
+      enabled: false,
+    });
+    menuItems.push({
+      label: `Страна: ${countryName}`,
+      enabled: false,
+    });
+    menuItems.push({ type: "separator" });
+  }
+
+  // Добавляем действия
+  menuItems.push({
+    label: "Обновить сейчас",
+    click: () => {
+      void updateTrayTemperature();
     },
-    {
-      label: "Выйти",
-      click: () => {
-        app.quit();
-      },
+  });
+  menuItems.push({
+    label: "Выйти",
+    click: () => {
+      app.quit();
     },
-  ]);
+  });
+
+  const contextMenu = Menu.buildFromTemplate(menuItems);
 
   tray.setContextMenu(contextMenu);
 }
