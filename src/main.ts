@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, NativeImage } from "electron";
+import { app, Tray, Menu, nativeImage, NativeImage, dialog } from "electron";
 import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -75,12 +75,81 @@ let lastUpdateTime: Date | null = null;
 let cityName: string = "";
 let countryName: string = "";
 
+// Массив для хранения последних 20 ошибок API
+interface ApiError {
+  timestamp: Date;
+  api: string; // Название API (weather, geocoding, etc.)
+  error: string; // Текст ошибки
+  url?: string; // URL запроса (опционально)
+}
+
+const apiErrors: ApiError[] = [];
+const MAX_ERRORS = 20;
+
+/**
+ * Добавляет ошибку в список последних ошибок
+ */
+function addApiError(api: string, error: string | Error, url?: string): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const apiError: ApiError = {
+    timestamp: new Date(),
+    api,
+    error: errorMessage,
+    url,
+  };
+  
+  apiErrors.push(apiError);
+  
+  // Ограничиваем количество ошибок до MAX_ERRORS
+  if (apiErrors.length > MAX_ERRORS) {
+    apiErrors.shift(); // Удаляем самую старую ошибку
+  }
+  
+  console.error(`[${api}] Ошибка добавлена в историю:`, errorMessage);
+}
+
+/**
+ * Показывает диалог с последними ошибками API
+ */
+function showApiErrors(): void {
+  if (apiErrors.length === 0) {
+    dialog.showMessageBox({
+      type: "info",
+      title: "История ошибок API",
+      message: "Ошибок не было",
+      detail: "Все запросы к API выполнялись успешно.",
+    });
+    return;
+  }
+
+  // Форматируем ошибки для отображения
+  const errorsText = apiErrors
+    .map((err, index) => {
+      const timeStr = err.timestamp.toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      const urlStr = err.url ? `\n  URL: ${err.url}` : "";
+      return `${index + 1}. [${timeStr}] ${err.api}\n  ${err.error}${urlStr}`;
+    })
+    .join("\n\n");
+
+  dialog.showMessageBox({
+    type: "error",
+    title: `История ошибок API (${apiErrors.length} из ${MAX_ERRORS})`,
+    message: `Последние ${apiErrors.length} ошибок:`,
+    detail: errorsText,
+    buttons: ["Закрыть"],
+  });
+}
+
 /**
  * Получает координаты по названию города и страны через Geocoding API
  */
 async function fetchCoordinatesByCity(city: string, country: string): Promise<{ latitude: number; longitude: number; cityName: string; countryName: string } | null> {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=1&language=ru`;
   try {
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=1&language=ru`;
     const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`);
@@ -97,6 +166,8 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     }
     return null;
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    addApiError("Geocoding API (поиск координат)", error, url);
     console.error("Failed to fetch coordinates:", err);
     return null;
   }
@@ -106,10 +177,10 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
  * Получает название города и страны по координатам через Geocoding API
  */
 async function fetchLocationByCoordinates(latitude: number, longitude: number): Promise<{ cityName: string; countryName: string } | null> {
+  // Используем reverse geocoding через search API с координатами
+  const url = `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=ru`;
+  console.log({url});
   try {
-    // Используем reverse geocoding через search API с координатами
-    const url = `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=ru`;
-    console.log({url});
     const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`);
@@ -124,6 +195,8 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
     }
     return null;
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    addApiError("Geocoding API (поиск местоположения)", error, url);
     console.error("Failed to fetch location info:", err);
     return null;
   }
@@ -170,12 +243,16 @@ async function initializeLocation(): Promise<boolean> {
     return true;
   }
   
+  const error = new Error("Не указаны ни координаты, ни город и страна!");
+  addApiError("Инициализация", error);
   console.error("Не указаны ни координаты, ни город и страна!");
   return false;
 }
 
 async function fetchTemperatureC(): Promise<number | null> {
   if (!WEATHER_URL) {
+    const error = new Error("WEATHER_URL не инициализирован");
+    addApiError("Weather API", error);
     console.error("WEATHER_URL не инициализирован");
     return null;
   }
@@ -189,8 +266,12 @@ async function fetchTemperatureC(): Promise<number | null> {
     if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
       return data.current_weather.temperature;
     }
+    const error = new Error("Неверный формат ответа API: отсутствует температура");
+    addApiError("Weather API", error, WEATHER_URL);
     return null;
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    addApiError("Weather API", error, WEATHER_URL);
     console.error("Failed to fetch weather:", err);
     return null;
   }
@@ -353,6 +434,14 @@ async function updateTrayTemperature() {
       void updateTrayTemperature();
     },
   });
+  menuItems.push({ type: "separator" });
+  menuItems.push({
+    label: `Показать ошибки API${apiErrors.length > 0 ? ` (${apiErrors.length})` : ""}`,
+    click: () => {
+      showApiErrors();
+    },
+  });
+  menuItems.push({ type: "separator" });
   menuItems.push({
     label: "Выйти",
     click: () => {
