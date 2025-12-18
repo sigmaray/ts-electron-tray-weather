@@ -6,7 +6,8 @@
   "scripts": {
     "start": "npm run build && electron --no-sandbox .",
     "dev": "npm run build && electron --no-sandbox .",
-    "build": "tsc"
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
   },
   "author": "",
   "license": "MIT",
