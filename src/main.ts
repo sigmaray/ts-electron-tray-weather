@@ -3,28 +3,68 @@ import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+// Определяем путь к .env файлу (в корне проекта)
+// В Electron __dirname может указывать на dist/, поэтому проверяем несколько вариантов
+function getEnvPath(): string {
+  // Вариант 1: если запускаем из dist/, то .env в родительской директории
+  const distPath = path.join(__dirname, "..", ".env");
+  if (fs.existsSync(distPath)) {
+    return distPath;
+  }
+  
+  // Вариант 2: если запускаем из корня проекта
+  const rootPath = path.join(process.cwd(), ".env");
+  if (fs.existsSync(rootPath)) {
+    return rootPath;
+  }
+  
+  // Вариант 3: создаём в корне проекта (где находится package.json)
+  return rootPath;
+}
 
-// Настройка местоположения: укажите ЛИБО координаты, ЛИБО город и страну
-// 
-// Option 1: Указать координаты напрямую (раскомментируйте и укажите свои значения)
-// const LATITUDE = 55.7558; // Moscow latitude
-// const LONGITUDE = 37.6173; // Moscow longitude
-// const CITY: string | undefined = undefined;
-// const COUNTRY: string | undefined = undefined;
-//
-// Option 2: Указать город и страну (координаты будут определены автоматически через API)
-const CITY: string | undefined = "Minsk";
-// const CITY = undefined;
-const COUNTRY: string | undefined = "Belarus";
-// const COUNTRY = undefined;
-// const LATITUDE: number | null = null;
-// const LONGITUDE: number | null = null;
+const envPath = getEnvPath();
+
+// Создаём .env файл с дефолтными значениями, если его нет
+if (!fs.existsSync(envPath)) {
+  const defaultEnvContent = `CITY=Minsk
+COUNTRY=Belarus
+LATITUDE=
+LONGITUDE=
+`;
+  fs.writeFileSync(envPath, defaultEnvContent, "utf8");
+  console.log(`Создан файл .env с дефолтными значениями: ${envPath}`);
+}
+
+// Загружаем переменные окружения
+// @ts-ignore - dotenv может не иметь типов в некоторых версиях
+const dotenv = require("dotenv");
+dotenv.config({ path: envPath });
+console.log(`Загружен .env файл: ${envPath}`);
+
+// Читаем настройки местоположения из .env файла
+// Можно указать ЛИБО координаты (LATITUDE, LONGITUDE), ЛИБО город и страну (CITY, COUNTRY)
+const CITY: string | undefined = process.env.CITY || undefined;
+const COUNTRY: string | undefined = process.env.COUNTRY || undefined;
+const LATITUDE_ENV = process.env.LATITUDE;
+const LONGITUDE_ENV = process.env.LONGITUDE;
 
 // Если указаны CITY и COUNTRY, но не LATITUDE и LONGITUDE, координаты будут определены через API
 let LATITUDE: number | null = null;
 let LONGITUDE: number | null = null;
-// let LATITUDE = 55.7558; // Moscow latitude
-// let LONGITUDE = 37.6173; // Moscow longitude
+
+// Парсим координаты из .env, если они указаны
+if (LATITUDE_ENV && LATITUDE_ENV.trim() !== "") {
+  const parsedLat = parseFloat(LATITUDE_ENV);
+  if (!isNaN(parsedLat)) {
+    LATITUDE = parsedLat;
+  }
+}
+if (LONGITUDE_ENV && LONGITUDE_ENV.trim() !== "") {
+  const parsedLon = parseFloat(LONGITUDE_ENV);
+  if (!isNaN(parsedLon)) {
+    LONGITUDE = parsedLon;
+  }
+}
 
 // Open-Meteo API (без ключа, бесплатно)
 let WEATHER_URL = "";
