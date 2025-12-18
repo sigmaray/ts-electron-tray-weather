@@ -108,7 +108,6 @@ jobs:
           Автоматический релиз от ${{ github.event.head_commit.date }}
           
           Коммит: ${{ github.sha }}
-          Автор: ${{ github.event.head_commit.author.name }}
           
           Собранные платформы:
           - Windows
