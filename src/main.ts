@@ -14,6 +14,7 @@ const WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}
 
 let tray: Tray | null = null;
 let updateInterval: NodeJS.Timeout | null = null;
+let lastUpdateTime: Date | null = null;
 
 async function fetchTemperatureC(): Promise<number | null> {
   try {
@@ -98,6 +99,11 @@ async function updateTrayTemperature() {
   const temp = await fetchTemperatureC();
   const label = temp !== null ? `${temp.toFixed(1)} °C` : "N/A";
 
+  // Обновляем время последнего успешного обновления, если температура получена успешно
+  if (temp !== null) {
+    lastUpdateTime = new Date();
+  }
+
   // Короткая надпись для самой иконки (чтобы влезала в небольшой размер)
   const shortLabel =
     temp !== null ? `${Math.round(temp)}°` : "NA";
@@ -106,8 +112,17 @@ async function updateTrayTemperature() {
   const iconWithTemp = createTemperatureIcon(shortLabel);
   tray.setImage(iconWithTemp);
 
+  // Форматируем время последнего обновления с секундами
+  let timeString = "";
+  if (lastUpdateTime) {
+    const hours = lastUpdateTime.getHours().toString().padStart(2, "0");
+    const minutes = lastUpdateTime.getMinutes().toString().padStart(2, "0");
+    const seconds = lastUpdateTime.getSeconds().toString().padStart(2, "0");
+    timeString = ` (обновлено: ${hours}:${minutes}:${seconds})`;
+  }
+
   // Tooltip при наведении
-  tray.setToolTip(`Температура: ${label}`);
+  tray.setToolTip(`Температура: ${label}${timeString}`);
 
   // Попытка отобразить текст прямо в трее (полноценно работает в macOS).
   try {
