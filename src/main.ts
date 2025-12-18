@@ -1,5 +1,8 @@
 import { app, Tray, Menu, nativeImage, NativeImage } from "electron";
-import path from "node:path"; // пока не используется, но может пригодиться позже для загрузки иконки PNG
+import { createCanvas } from "canvas";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 // Coordinates for your city.
 // TODO: поменяйте на свои координаты (широта/долгота).
@@ -29,12 +32,64 @@ async function fetchTemperatureC(): Promise<number | null> {
   }
 }
 
+/**
+ * Создаёт PNG-иконку с текстом температуры через canvas.
+ * По аналогии с рабочим примером из другого проекта.
+ */
+function createTemperatureIcon(text: string): NativeImage {
+  // Увеличиваем размер для лучшего качества и видимости текста
+  const size = 32; // Увеличил размер canvas
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext("2d");
+
+  // Определяем цвет в зависимости от состояния
+  let bgColor: string;
+  let textColor: string = "#FFFFFF";
+
+  if (text === "--" || text === "NA") {
+    // Прочерк или ошибка: серый
+    bgColor = "#808080";
+  } else {
+    // Активная температура: яркий синий
+    bgColor = "#1e88e5";
+  }
+
+  // Рисуем фон
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, size, size);
+
+  // Настройки текста
+  ctx.fillStyle = textColor;
+  ctx.font = "bold 18px Arial"; // Увеличил размер шрифта пропорционально размеру canvas
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  
+  // Рисуем текст по центру
+  const textX = size / 2;
+  const textY = size / 2;
+  ctx.fillText(text, textX, textY);
+
+  // Конвертируем canvas в buffer
+  const buffer = canvas.toBuffer("image/png");
+  
+  // Отладочный вывод и сохранение тестового файла
+  console.log(`Создана иконка для "${text}" (размер canvas: ${size}x${size})`);
+  
+  // Сохраняем тестовый файл для отладки (можно удалить позже)
+  try {
+    const testFile = path.join(os.tmpdir(), `weather-icon-${text.replace(/[^a-zA-Z0-9]/g, "_")}.png`);
+    fs.writeFileSync(testFile, buffer);
+    console.log(`Тестовый файл сохранён: ${testFile}`);
+  } catch (e) {
+    console.warn("Не удалось сохранить тестовый файл:", e);
+  }
+  
+  return nativeImage.createFromBuffer(buffer);
+}
+
 function createBaseIcon(): NativeImage {
-  // Используем пустую прозрачную иконку, чтобы опираться на текст/tooltip.
-  // При желании сюда можно подставить PNG.
-  const size = 16;
-  const img = nativeImage.createEmpty();
-  return img.resize({ width: size, height: size });
+  // Базовая иконка до первой загрузки температуры
+  return createTemperatureIcon("--");
 }
 
 async function updateTrayTemperature() {
@@ -42,6 +97,14 @@ async function updateTrayTemperature() {
 
   const temp = await fetchTemperatureC();
   const label = temp !== null ? `${temp.toFixed(1)} °C` : "N/A";
+
+  // Короткая надпись для самой иконки (чтобы влезала в небольшой размер)
+  const shortLabel =
+    temp !== null ? `${Math.round(temp)}°` : "NA";
+
+  // Обновляем саму иконку: рисуем температуру как текст
+  const iconWithTemp = createTemperatureIcon(shortLabel);
+  tray.setImage(iconWithTemp);
 
   // Tooltip при наведении
   tray.setToolTip(`Температура: ${label}`);

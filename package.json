@@ -6,17 +6,18 @@
   "scripts": {
     "start": "npm run build && electron --no-sandbox .",
     "dev": "npm run build && electron --no-sandbox .",
-    "build": "tsc"
+    "build": "tsc",
+    "postinstall": "electron-rebuild"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "canvas": "^2.11.2",
     "electron": "^33.0.0"
   }
 }
-
-
