@@ -38,7 +38,7 @@ async function fetchTemperatureC(): Promise<number | null> {
  */
 function createTemperatureIcon(text: string): NativeImage {
   // Увеличиваем размер для лучшего качества и видимости текста
-  const size = 32; // Увеличил размер canvas
+  const size = 22; // Увеличил размер canvas
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
@@ -60,7 +60,7 @@ function createTemperatureIcon(text: string): NativeImage {
 
   // Настройки текста
   ctx.fillStyle = textColor;
-  ctx.font = "bold 18px Arial"; // Увеличил размер шрифта пропорционально размеру canvas
+  ctx.font = "bold 12px Arial"; // Увеличил размер шрифта пропорционально размеру canvas
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
@@ -75,14 +75,14 @@ function createTemperatureIcon(text: string): NativeImage {
   // Отладочный вывод и сохранение тестового файла
   console.log(`Создана иконка для "${text}" (размер canvas: ${size}x${size})`);
   
-  // Сохраняем тестовый файл для отладки (можно удалить позже)
-  try {
-    const testFile = path.join(os.tmpdir(), `weather-icon-${text.replace(/[^a-zA-Z0-9]/g, "_")}.png`);
-    fs.writeFileSync(testFile, buffer);
-    console.log(`Тестовый файл сохранён: ${testFile}`);
-  } catch (e) {
-    console.warn("Не удалось сохранить тестовый файл:", e);
-  }
+  // // Сохраняем тестовый файл для отладки (можно удалить позже)
+  // try {
+  //   const testFile = path.join(os.tmpdir(), `weather-icon-${text.replace(/[^a-zA-Z0-9]/g, "_")}.png`);
+  //   fs.writeFileSync(testFile, buffer);
+  //   console.log(`Тестовый файл сохранён: ${testFile}`);
+  // } catch (e) {
+  //   console.warn("Не удалось сохранить тестовый файл:", e);
+  // }
   
   return nativeImage.createFromBuffer(buffer);
 }
