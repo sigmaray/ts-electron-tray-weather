@@ -43,8 +43,8 @@ jobs:
     - name: Build TypeScript
       run: npm run build
 
-    - name: Rebuild native modules for Electron
-      run: npx electron-rebuild
+    # - name: Rebuild native modules for Electron
+    #   run: npx electron-rebuild
 
     - name: Build application
       run: npm run build:electron

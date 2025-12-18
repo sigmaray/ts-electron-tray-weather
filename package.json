@@ -13,10 +13,10 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@electron/rebuild": "^3.7.2",
     "@types/node": "^22.10.2",
     "electron-builder": "^24.13.3",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "electron": "^39.2.7"
   },
   "build": {
     "appId": "com.electron.weather-tray",
@@ -33,7 +33,9 @@
       "target": [
         {
           "target": "zip",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -41,7 +43,9 @@
       "target": [
         {
           "target": "zip",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Utility"
@@ -50,7 +54,10 @@
       "target": [
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "public.app-category.utilities"
@@ -58,7 +65,6 @@
   },
   "dependencies": {
     "canvas": "^3.2.0",
-    "dotenv": "^16.4.5",
-    "electron": "^33.0.0"
+    "dotenv": "^16.4.5"
   }
 }
