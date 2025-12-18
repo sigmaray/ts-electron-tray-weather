@@ -6,11 +6,18 @@ import * as os from "node:os";
 
 // Coordinates for your city.
 // TODO: поменяйте на свои координаты (широта/долгота).
-const LATITUDE = 55.7558; // Moscow latitude as default example
-const LONGITUDE = 37.6173; // Moscow longitude as default example
+// const LATITUDE = 55.7558; // Moscow latitude as default example
+// const LONGITUDE = 37.6173; // Moscow longitude as default example
+
+// Minsk, Belarus
+// https://geocoding-api.open-meteo.com/v1/search?name=Minsk&country=Belarus&count=1&language=en&format=json
+const LATITUDE = 53.9;
+const LONGITUDE = 27.5667;
 
 // Open-Meteo API (без ключа, бесплатно)
 const WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true`;
+
+console.log({WEATHER_URL});
 
 let tray: Tray | null = null;
 let updateInterval: NodeJS.Timeout | null = null;
