@@ -1,0 +1,22 @@
+{
+  "name": "electron-weather-tray",
+  "version": "1.0.0",
+  "description": "Electron + TypeScript app showing current temperature in system tray, updating every minute.",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "npm run build && electron --no-sandbox .",
+    "dev": "npm run build && electron --no-sandbox .",
+    "build": "tsc"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "electron": "^33.0.0"
+  }
+}
+
+
