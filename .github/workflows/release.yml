@@ -1,0 +1,117 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      datetime: ${{ steps.datetime.outputs.datetime }}
+    steps:
+    - name: Get current date and time
+      id: datetime
+      run: echo "datetime=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build TypeScript
+      run: npm run build
+
+    - name: Setup electron-builder
+      uses: electron-userland/electron-builder-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build application
+      run: npm run build:electron
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Rename release files with datetime
+      run: |
+        datetime="${{ needs.prepare.outputs.datetime }}"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          Get-ChildItem -Path "release" -Filter "*.zip" | ForEach-Object {
+            $platform = if ($_.Name -match "win") { "win" } elseif ($_.Name -match "linux") { "linux" } elseif ($_.Name -match "mac") { "mac" } else { "unknown" }
+            $arch = if ($_.Name -match "x64") { "x64" } elseif ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $newName = "Weather-Tray-${datetime}-${platform}-${arch}.zip"
+            Rename-Item -Path $_.FullName -NewName $newName
+          }
+        else
+          cd release
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              platform="unknown"
+              arch="x64"
+              if echo "$file" | grep -q "win"; then platform="win"; fi
+              if echo "$file" | grep -q "linux"; then platform="linux"; fi
+              if echo "$file" | grep -q "mac\|darwin"; then platform="mac"; fi
+              if echo "$file" | grep -q "arm64"; then arch="arm64"; fi
+              newname="Weather-Tray-${datetime}-${platform}-${arch}.zip"
+              mv "$file" "$newname"
+            fi
+          done
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ matrix.os }}
+        path: release/*.zip
+        retention-days: 30
+
+  create-release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: release-${{ needs.prepare.outputs.datetime }}
+        name: Release ${{ needs.prepare.outputs.datetime }}
+        body: |
+          Автоматический релиз от ${{ github.event.head_commit.date }}
+          
+          Коммит: ${{ github.sha }}
+          Автор: ${{ github.event.head_commit.author.name }}
+          
+          Собранные платформы:
+          - Windows
+          - Linux
+          - macOS
+        files: |
+          artifacts/release-ubuntu-latest/*.zip
+          artifacts/release-windows-latest/*.zip
+          artifacts/release-macos-latest/*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

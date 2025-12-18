@@ -7,14 +7,54 @@
     "start": "npm run build && electron --no-sandbox .",
     "dev": "npm run build && electron --no-sandbox .",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:electron": "electron-builder --publish never"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
     "@types/node": "^22.10.2",
+    "electron-builder": "^24.13.3",
     "typescript": "^5.7.2"
+  },
+  "build": {
+    "appId": "com.electron.weather-tray",
+    "productName": "Weather Tray",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Utility"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "public.app-category.utilities"
+    }
   },
   "dependencies": {
     "canvas": "^3.2.0",
