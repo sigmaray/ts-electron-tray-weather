@@ -1,5 +1,5 @@
 {
-  "name": "electron-weather-tray",
+  "name": "electron-tray-weather",
   "version": "1.0.0",
   "description": "Electron + TypeScript app showing current temperature in system tray, updating every minute.",
   "main": "dist/main.js",
@@ -19,8 +19,8 @@
     "electron": "^39.2.7"
   },
   "build": {
-    "appId": "com.electron.weather-tray",
-    "productName": "Weather Tray",
+    "appId": "com.electron.tray-weather",
+    "productName": "Tray Weather",
     "directories": {
       "output": "release"
     },
