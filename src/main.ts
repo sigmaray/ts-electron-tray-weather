@@ -91,21 +91,78 @@ interface ApiError {
   api: string; // Название API (weather, geocoding, etc.)
   error: string; // Текст ошибки
   url?: string; // URL запроса (опционально)
+  statusCode?: number; // HTTP статус код (404, 403, 500 и т.д.)
+  errorCode?: string; // Код ошибки Node.js (ENOTFOUND, ECONNREFUSED и т.д.)
+  details?: string; // Дополнительные детали
 }
 
 const apiErrors: ApiError[] = [];
 const MAX_ERRORS = 20;
 
 /**
- * Добавляет ошибку в список последних ошибок
+ * Извлекает детальную информацию из ошибки
  */
-function addApiError(api: string, error: string | Error, url?: string): void {
-  const errorMessage = error instanceof Error ? error.message : String(error);
+function extractErrorDetails(err: unknown): {
+  message: string;
+  errorCode?: string;
+  statusCode?: number;
+  details?: string;
+} {
+  if (err instanceof Error) {
+    const message = err.message;
+    let errorCode: string | undefined;
+    let statusCode: number | undefined;
+    let details: string | undefined;
+
+    // Проверяем наличие кода ошибки Node.js (ENOTFOUND, ECONNREFUSED и т.д.)
+    if ((err as any).code) {
+      errorCode = (err as any).code;
+    }
+
+    // Проверяем наличие HTTP статус кода
+    const httpStatusMatch = message.match(/HTTP error (\d+)/i) || message.match(/status (\d+)/i);
+    if (httpStatusMatch) {
+      statusCode = parseInt(httpStatusMatch[1], 10);
+    }
+
+    // Извлекаем дополнительные детали из stack trace или других свойств
+    if (err.stack) {
+      const stackLines = err.stack.split('\n');
+      if (stackLines.length > 1) {
+        details = stackLines.slice(1, 3).join('\n').trim(); // Первые 2 строки stack trace после сообщения
+      }
+    }
+
+    // Если есть свойство cause, добавляем его в детали
+    if ((err as any).cause) {
+      const cause = (err as any).cause;
+      if (details) {
+        details += `\nПричина: ${cause instanceof Error ? cause.message : String(cause)}`;
+      } else {
+        details = `Причина: ${cause instanceof Error ? cause.message : String(cause)}`;
+      }
+    }
+
+    return { message, errorCode, statusCode, details };
+  }
+
+  return { message: String(err) };
+}
+
+/**
+ * Добавляет ошибку в список последних ошибок с детальной информацией
+ */
+function addApiError(api: string, error: string | Error, url?: string, additionalInfo?: { statusCode?: number; errorCode?: string }): void {
+  const errorDetails = extractErrorDetails(error);
+  
   const apiError: ApiError = {
     timestamp: new Date(),
     api,
-    error: errorMessage,
+    error: errorDetails.message,
     url,
+    statusCode: additionalInfo?.statusCode || errorDetails.statusCode,
+    errorCode: additionalInfo?.errorCode || errorDetails.errorCode,
+    details: errorDetails.details,
   };
   
   apiErrors.push(apiError);
@@ -115,7 +172,13 @@ function addApiError(api: string, error: string | Error, url?: string): void {
     apiErrors.shift(); // Удаляем самую старую ошибку
   }
   
-  console.error(`[${api}] Ошибка добавлена в историю:`, errorMessage);
+  const errorInfo = [
+    errorDetails.message,
+    errorDetails.errorCode && `Код: ${errorDetails.errorCode}`,
+    errorDetails.statusCode && `HTTP: ${errorDetails.statusCode}`,
+  ].filter(Boolean).join(', ');
+  
+  console.error(`[${api}] Ошибка добавлена в историю:`, errorInfo);
 }
 
 /**
@@ -433,7 +496,35 @@ function showApiErrors(): void {
       let urlHtml = "";
       if (err.url) {
         const escapedUrl = escapeHtml(err.url);
-        urlHtml = `<br>  <strong>URL:</strong> <a href="${escapedUrl}" class="url-link">${escapedUrl}</a>`;
+        urlHtml = `<div class="error-url"><strong>URL:</strong> <a href="${escapedUrl}" class="url-link">${escapedUrl}</a></div>`;
+      }
+      
+      let statusCodeHtml = "";
+      if (err.statusCode) {
+        const statusText = err.statusCode === 404 ? "Not Found" :
+                          err.statusCode === 403 ? "Forbidden" :
+                          err.statusCode === 500 ? "Internal Server Error" :
+                          err.statusCode === 503 ? "Service Unavailable" :
+                          err.statusCode === 429 ? "Too Many Requests" :
+                          "Unknown";
+        statusCodeHtml = `<div class="error-status"><strong>HTTP статус:</strong> <span class="status-code status-${err.statusCode}">${err.statusCode} ${statusText}</span></div>`;
+      }
+      
+      let errorCodeHtml = "";
+      if (err.errorCode) {
+        const errorCodeDesc = err.errorCode === "ENOTFOUND" ? " (DNS lookup failed - не удалось найти хост)" :
+                             err.errorCode === "ECONNREFUSED" ? " (Connection refused - соединение отклонено)" :
+                             err.errorCode === "ETIMEDOUT" ? " (Timeout - превышено время ожидания)" :
+                             err.errorCode === "ECONNRESET" ? " (Connection reset - соединение сброшено)" :
+                             err.errorCode === "EAI_AGAIN" ? " (DNS lookup failed - временная ошибка DNS)" :
+                             "";
+        errorCodeHtml = `<div class="error-code"><strong>Код ошибки:</strong> <span class="code-value">${err.errorCode}${errorCodeDesc}</span></div>`;
+      }
+      
+      let detailsHtml = "";
+      if (err.details) {
+        const escapedDetails = escapeHtml(err.details);
+        detailsHtml = `<div class="error-details"><strong>Детали:</strong><pre class="details-pre">${escapedDetails}</pre></div>`;
       }
       
       const escapedApi = escapeHtml(err.api);
@@ -446,7 +537,10 @@ function showApiErrors(): void {
             <div class="error-time">[${timeStr}]</div>
             <div class="error-api"><strong>${escapedApi}</strong></div>
             <div class="error-message">${escapedError}</div>
+            ${statusCodeHtml}
+            ${errorCodeHtml}
             ${urlHtml}
+            ${detailsHtml}
           </div>
         </div>
       `;
@@ -516,6 +610,51 @@ function showApiErrors(): void {
         }
         .error-message {
           color: #333;
+          white-space: pre-wrap;
+          word-break: break-word;
+          margin-bottom: 8px;
+        }
+        .error-status, .error-code, .error-url, .error-details {
+          margin-top: 8px;
+          font-size: 12px;
+        }
+        .status-code {
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-weight: 600;
+        }
+        .status-404 {
+          background: #ffebee;
+          color: #c62828;
+        }
+        .status-403 {
+          background: #fff3e0;
+          color: #e65100;
+        }
+        .status-500 {
+          background: #fce4ec;
+          color: #c2185b;
+        }
+        .status-503 {
+          background: #fff9c4;
+          color: #f57f17;
+        }
+        .status-429 {
+          background: #fff3e0;
+          color: #f57c00;
+        }
+        .code-value {
+          font-family: "Courier New", monospace;
+          color: #d32f2f;
+          font-weight: 600;
+        }
+        .details-pre {
+          background: #fafafa;
+          padding: 8px;
+          border-radius: 3px;
+          font-size: 11px;
+          margin-top: 4px;
+          overflow-x: auto;
           white-space: pre-wrap;
           word-break: break-word;
         }
@@ -594,7 +733,9 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      throw new Error(`HTTP error ${res.status}`);
+      const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
+      addApiError("Geocoding API (поиск координат)", error, url, { statusCode: res.status });
+      return null;
     }
     const data: any = await res.json();
     if (data && data.results && data.results.length > 0) {
@@ -617,7 +758,9 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     return null;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    addApiError("Geocoding API (поиск координат)", error, url);
+    // Извлекаем код ошибки, если он есть
+    const errorCode = (err as any)?.code;
+    addApiError("Geocoding API (поиск координат)", error, url, errorCode ? { errorCode } : undefined);
     console.error("Failed to fetch coordinates:", err);
     return null;
   }
@@ -633,7 +776,9 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      throw new Error(`HTTP error ${res.status}`);
+      const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
+      addApiError("Geocoding API (поиск местоположения)", error, url, { statusCode: res.status });
+      return null;
     }
     const data: any = await res.json();
     if (data && data.results && data.results.length > 0) {
@@ -646,7 +791,9 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
     return null;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    addApiError("Geocoding API (поиск местоположения)", error, url);
+    // Извлекаем код ошибки, если он есть
+    const errorCode = (err as any)?.code;
+    addApiError("Geocoding API (поиск местоположения)", error, url, errorCode ? { errorCode } : undefined);
     console.error("Failed to fetch location info:", err);
     return null;
   }
@@ -710,7 +857,9 @@ async function fetchTemperatureC(): Promise<number | null> {
   try {
     const res = await fetch(WEATHER_URL);
     if (!res.ok) {
-      throw new Error(`HTTP error ${res.status}`);
+      const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
+      addApiError("Weather API", error, WEATHER_URL, { statusCode: res.status });
+      return null;
     }
     const data: any = await res.json();
     if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
@@ -721,7 +870,9 @@ async function fetchTemperatureC(): Promise<number | null> {
     return null;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    addApiError("Weather API", error, WEATHER_URL);
+    // Извлекаем код ошибки, если он есть
+    const errorCode = (err as any)?.code;
+    addApiError("Weather API", error, WEATHER_URL, errorCode ? { errorCode } : undefined);
     console.error("Failed to fetch weather:", err);
     return null;
   }
