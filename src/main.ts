@@ -145,6 +145,269 @@ function isUrl(text: string): boolean {
 }
 
 /**
+ * Показывает окно со справочной информацией о приложении
+ */
+function showHelp(): void {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Как пользоваться</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-size: 14px;
+          line-height: 1.6;
+          color: #333;
+          background: #fff;
+          padding: 20px;
+        }
+        .header {
+          margin-bottom: 20px;
+          padding-bottom: 16px;
+          border-bottom: 2px solid #1976d2;
+        }
+        .header h1 {
+          font-size: 24px;
+          font-weight: 600;
+          color: #1976d2;
+          margin-bottom: 8px;
+        }
+        .content {
+          max-height: calc(100vh - 120px);
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        .section {
+          margin-bottom: 24px;
+        }
+        .section h2 {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1976d2;
+          margin-bottom: 12px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid #e0e0e0;
+        }
+        .section h3 {
+          font-size: 16px;
+          font-weight: 600;
+          color: #424242;
+          margin-top: 16px;
+          margin-bottom: 8px;
+        }
+        .section p {
+          margin-bottom: 12px;
+          color: #555;
+        }
+        .section ul, .section ol {
+          margin-left: 24px;
+          margin-bottom: 12px;
+          color: #555;
+        }
+        .section li {
+          margin-bottom: 8px;
+        }
+        .section code {
+          background: #f5f5f5;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-family: "Courier New", monospace;
+          font-size: 13px;
+          color: #d32f2f;
+        }
+        .section pre {
+          background: #f5f5f5;
+          padding: 12px;
+          border-radius: 4px;
+          overflow-x: auto;
+          margin-bottom: 12px;
+          font-family: "Courier New", monospace;
+          font-size: 12px;
+        }
+        .feature-list {
+          list-style: none;
+          margin-left: 0;
+        }
+        .feature-list li {
+          margin-bottom: 12px;
+          padding-left: 24px;
+          position: relative;
+        }
+        .feature-list li::before {
+          content: "✓";
+          position: absolute;
+          left: 0;
+          color: #4caf50;
+          font-weight: bold;
+        }
+        .url-link {
+          color: #1976d2;
+          text-decoration: none;
+        }
+        .url-link:hover {
+          text-decoration: underline;
+        }
+        /* Стили для скроллбара */
+        .content::-webkit-scrollbar {
+          width: 10px;
+        }
+        .content::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 5px;
+        }
+        .content::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 5px;
+        }
+        .content::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+        .highlight {
+          background: #fff9c4;
+          padding: 2px 4px;
+          border-radius: 2px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>🌡️ Tray Weather — Справочная информация</h1>
+        <p>Приложение для отображения текущей температуры в системном трее</p>
+      </div>
+      <div class="content">
+        <div class="section">
+          <h2>📋 Возможности</h2>
+          <ul class="feature-list">
+            <li><strong>Температура в иконке трея</strong> — отображается прямо на иконке в виде текста (например, <code>5°</code>, <code>-3°</code>)</li>
+            <li><strong>Автоматическое обновление</strong> — температура обновляется каждую минуту</li>
+            <li><strong>Гибкая настройка местоположения</strong> — можно указать либо координаты, либо город и страну</li>
+            <li><strong>Время последнего обновления</strong> — показывается в tooltip и меню с точностью до секунды</li>
+            <li><strong>Информация о местоположении</strong> — координаты, город и страна в контекстном меню</li>
+            <li><strong>История ошибок API</strong> — сохраняются последние 20 ошибок для отладки</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2>📍 Настройка местоположения</h2>
+          <p>Настройки хранятся в файле <code>settings.json</code> в корне проекта. При первом запуске файл создаётся автоматически с дефолтными значениями для New York City.</p>
+          
+          <h3>Вариант 1: Указать город и страну</h3>
+          <p>Отредактируйте файл <code>settings.json</code>:</p>
+          <pre>{
+  "city": "Minsk",
+  "country": "Belarus",
+  "latitude": null,
+  "longitude": null
+}</pre>
+          <p>Координаты будут определены автоматически через Geocoding API.</p>
+
+          <h3>Вариант 2: Указать координаты напрямую</h3>
+          <p>Отредактируйте файл <code>settings.json</code>:</p>
+          <pre>{
+  "city": null,
+  "country": null,
+  "latitude": 55.7558,
+  "longitude": 37.6173
+}</pre>
+          <p>Название города и страны будут определены автоматически по координатам.</p>
+        </div>
+
+        <div class="section">
+          <h2>💡 Отображение информации</h2>
+          
+          <h3>Иконка в трее</h3>
+          <p>Температура отображается <span class="highlight">прямо на иконке</span> в виде текста. Иконка обновляется каждую минуту.</p>
+
+          <h3>Tooltip (при наведении)</h3>
+          <p>Показывает:</p>
+          <ul>
+            <li>Название города и страны (если доступно)</li>
+            <li>Текущую температуру</li>
+            <li>Время последнего успешного обновления с секундами</li>
+          </ul>
+          <p>Пример: <code>Нью-Йорк, США\nТемпература: 0.2 °C (обновлено: 14:35:42)</code></p>
+
+          <h3>Контекстное меню (правый клик)</h3>
+          <p>Содержит:</p>
+          <ul>
+            <li>Текущую температуру</li>
+            <li>Время последнего обновления</li>
+            <li>Координаты (LATITUDE и LONGITUDE)</li>
+            <li>Город и страну (если доступны)</li>
+            <li>Пункт <strong>"Обновить сейчас"</strong> для ручного обновления</li>
+            <li>Пункт <strong>"Показать ошибки API (N)"</strong> для просмотра истории ошибок</li>
+            <li>Пункт <strong>"Выйти"</strong></li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2>🐛 История ошибок API</h2>
+          <p>Приложение сохраняет последние 20 ошибок взаимодействия с API. Для просмотра:</p>
+          <ol>
+            <li>Кликните правой кнопкой мыши на иконку в трее</li>
+            <li>Выберите пункт <strong>"Показать ошибки API (N)"</strong></li>
+            <li>Откроется окно с подробной информацией о каждой ошибке:
+              <ul>
+                <li>Время возникновения</li>
+                <li>Название API</li>
+                <li>Текст ошибки</li>
+                <li>URL запроса (если доступен, кликабельный)</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+
+        <div class="section">
+          <h2>🔧 Технические детали</h2>
+          <ul>
+            <li><strong>Язык:</strong> TypeScript</li>
+            <li><strong>Фреймворк:</strong> Electron</li>
+            <li><strong>API погоды:</strong> <a href="https://api.open-meteo.com" class="url-link">Open-Meteo</a> (бесплатно, без ключа)</li>
+            <li><strong>API геокодирования:</strong> <a href="https://geocoding-api.open-meteo.com" class="url-link">Open-Meteo Geocoding</a></li>
+            <li><strong>Создание иконок:</strong> Canvas (для отрисовки текста температуры)</li>
+            <li><strong>Конфигурация:</strong> <code>settings.json</code> файл</li>
+          </ul>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Создаём окно для отображения справки
+  const helpWindow = new BrowserWindow({
+    width: 700,
+    height: 700,
+    title: "Как пользоваться — Tray Weather",
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  // Загружаем HTML-контент
+  helpWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  // Обработка кликов по ссылкам через webContents
+  helpWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  // Обработка навигации (если пользователь кликнет на ссылку)
+  helpWindow.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+}
+
+/**
  * Показывает окно с последними ошибками API (с прокруткой и кликабельными ссылками)
  */
 function showApiErrors(): void {
@@ -619,6 +882,13 @@ async function updateTrayTemperature() {
     label: "Обновить сейчас",
     click: () => {
       void updateTrayTemperature();
+    },
+  });
+  menuItems.push({ type: "separator" });
+  menuItems.push({
+    label: "Как пользоваться",
+    click: () => {
+      showHelp();
     },
   });
   menuItems.push({ type: "separator" });
