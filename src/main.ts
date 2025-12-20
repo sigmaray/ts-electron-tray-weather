@@ -3,17 +3,25 @@ import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-// Определяем путь к .env файлу (в корне проекта)
+// Интерфейс для настроек
+interface Settings {
+  city?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+// Определяем путь к settings.json файлу (в корне проекта)
 // В Electron __dirname может указывать на dist/, поэтому проверяем несколько вариантов
-function getEnvPath(): string {
-  // Вариант 1: если запускаем из dist/, то .env в родительской директории
-  const distPath = path.join(__dirname, "..", ".env");
+function getSettingsPath(): string {
+  // Вариант 1: если запускаем из dist/, то settings.json в родительской директории
+  const distPath = path.join(__dirname, "..", "settings.json");
   if (fs.existsSync(distPath)) {
     return distPath;
   }
   
   // Вариант 2: если запускаем из корня проекта
-  const rootPath = path.join(process.cwd(), ".env");
+  const rootPath = path.join(process.cwd(), "settings.json");
   if (fs.existsSync(rootPath)) {
     return rootPath;
   }
@@ -22,49 +30,51 @@ function getEnvPath(): string {
   return rootPath;
 }
 
-const envPath = getEnvPath();
-
-// Создаём .env файл с дефолтными значениями, если его нет
-if (!fs.existsSync(envPath)) {
-  const defaultEnvContent = `CITY=New York City
-COUNTRY=United States
-LATITUDE=
-LONGITUDE=
-`;
-  fs.writeFileSync(envPath, defaultEnvContent, "utf8");
-  console.log(`Создан файл .env с дефолтными значениями: ${envPath}`);
+function loadSettings(): Settings {
+  const settingsPath = getSettingsPath();
+  
+  // Создаём settings.json файл с дефолтными значениями, если его нет
+  if (!fs.existsSync(settingsPath)) {
+    const defaultSettings: Settings = {
+      city: "New York City",
+      country: "United States",
+      latitude: null,
+      longitude: null,
+    };
+    fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2), "utf8");
+    console.log(`Создан файл settings.json с дефолтными значениями: ${settingsPath}`);
+    return defaultSettings;
+  }
+  
+  // Загружаем настройки из settings.json
+  try {
+    const settingsContent = fs.readFileSync(settingsPath, "utf8");
+    const settings: Settings = JSON.parse(settingsContent);
+    console.log(`Загружен файл settings.json: ${settingsPath}`);
+    return settings;
+  } catch (err) {
+    console.error("Ошибка при загрузке settings.json:", err);
+    // Возвращаем дефолтные настройки при ошибке
+    return {
+      city: "New York City",
+      country: "United States",
+      latitude: null,
+      longitude: null,
+    };
+  }
 }
 
-// Загружаем переменные окружения
-// @ts-ignore - dotenv может не иметь типов в некоторых версиях
-const dotenv = require("dotenv");
-dotenv.config({ path: envPath });
-console.log(`Загружен .env файл: ${envPath}`);
+// Загружаем настройки
+const settings = loadSettings();
 
-// Читаем настройки местоположения из .env файла
-// Можно указать ЛИБО координаты (LATITUDE, LONGITUDE), ЛИБО город и страну (CITY, COUNTRY)
-const CITY: string | undefined = process.env.CITY || undefined;
-const COUNTRY: string | undefined = process.env.COUNTRY || undefined;
-const LATITUDE_ENV = process.env.LATITUDE;
-const LONGITUDE_ENV = process.env.LONGITUDE;
+// Читаем настройки местоположения из settings.json
+// Можно указать ЛИБО координаты (latitude, longitude), ЛИБО город и страну (city, country)
+const CITY: string | undefined = settings.city;
+const COUNTRY: string | undefined = settings.country;
 
 // Если указаны CITY и COUNTRY, но не LATITUDE и LONGITUDE, координаты будут определены через API
-let LATITUDE: number | null = null;
-let LONGITUDE: number | null = null;
-
-// Парсим координаты из .env, если они указаны
-if (LATITUDE_ENV && LATITUDE_ENV.trim() !== "") {
-  const parsedLat = parseFloat(LATITUDE_ENV);
-  if (!isNaN(parsedLat)) {
-    LATITUDE = parsedLat;
-  }
-}
-if (LONGITUDE_ENV && LONGITUDE_ENV.trim() !== "") {
-  const parsedLon = parseFloat(LONGITUDE_ENV);
-  if (!isNaN(parsedLon)) {
-    LONGITUDE = parsedLon;
-  }
-}
+let LATITUDE: number | null = settings.latitude ?? null;
+let LONGITUDE: number | null = settings.longitude ?? null;
 
 // Open-Meteo API (без ключа, бесплатно)
 let WEATHER_URL = "";

@@ -36,6 +36,6 @@ Thumbs.db
 /coverage/
 *.asar
 
-# Environment variables
-.env
+# Settings
+settings.json
 
