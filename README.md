@@ -1,4 +1,4 @@
-# Electron Weather Tray (TypeScript)
+# Electron Tray Weather App (TypeScript)
 
 Простое приложение на **Electron + TypeScript**, которое показывает текущую температуру в **иконке в системном трее** и обновляет её **раз в минуту**.
 
