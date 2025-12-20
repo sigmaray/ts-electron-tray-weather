@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, NativeImage, dialog } from "electron";
+import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell } from "electron";
 import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -119,7 +119,33 @@ function addApiError(api: string, error: string | Error, url?: string): void {
 }
 
 /**
- * Показывает диалог с последними ошибками API
+ * Экранирует HTML-специальные символы
+ */
+function escapeHtml(text: string): string {
+  const map: { [key: string]: string } = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+/**
+ * Проверяет, является ли строка URL
+ */
+function isUrl(text: string): boolean {
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Показывает окно с последними ошибками API (с прокруткой и кликабельными ссылками)
  */
 function showApiErrors(): void {
   if (apiErrors.length === 0) {
@@ -132,25 +158,166 @@ function showApiErrors(): void {
     return;
   }
 
-  // Форматируем ошибки для отображения
-  const errorsText = apiErrors
+  // Форматируем ошибки для HTML-отображения
+  const errorsHtml = apiErrors
     .map((err, index) => {
       const timeStr = err.timestamp.toLocaleTimeString("ru-RU", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
       });
-      const urlStr = err.url ? `\n  URL: ${err.url}` : "";
-      return `${index + 1}. [${timeStr}] ${err.api}\n  ${err.error}${urlStr}`;
+      
+      let urlHtml = "";
+      if (err.url) {
+        const escapedUrl = escapeHtml(err.url);
+        urlHtml = `<br>  <strong>URL:</strong> <a href="${escapedUrl}" class="url-link">${escapedUrl}</a>`;
+      }
+      
+      const escapedApi = escapeHtml(err.api);
+      const escapedError = escapeHtml(err.error);
+      
+      return `
+        <div class="error-item">
+          <div class="error-number">${index + 1}.</div>
+          <div class="error-content">
+            <div class="error-time">[${timeStr}]</div>
+            <div class="error-api"><strong>${escapedApi}</strong></div>
+            <div class="error-message">${escapedError}</div>
+            ${urlHtml}
+          </div>
+        </div>
+      `;
     })
-    .join("\n\n");
+    .join("");
 
-  dialog.showMessageBox({
-    type: "error",
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>История ошибок API (${apiErrors.length} из ${MAX_ERRORS})</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-size: 13px;
+          line-height: 1.5;
+          color: #333;
+          background: #fff;
+          padding: 16px;
+        }
+        .header {
+          margin-bottom: 16px;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #e0e0e0;
+        }
+        .header h1 {
+          font-size: 18px;
+          font-weight: 600;
+          color: #d32f2f;
+        }
+        .error-list {
+          max-height: calc(100vh - 100px);
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        .error-item {
+          display: flex;
+          margin-bottom: 16px;
+          padding: 12px;
+          background: #f5f5f5;
+          border-left: 3px solid #d32f2f;
+          border-radius: 4px;
+        }
+        .error-number {
+          font-weight: bold;
+          color: #666;
+          margin-right: 12px;
+          min-width: 24px;
+        }
+        .error-content {
+          flex: 1;
+        }
+        .error-time {
+          color: #666;
+          font-size: 11px;
+          margin-bottom: 4px;
+        }
+        .error-api {
+          color: #d32f2f;
+          margin-bottom: 6px;
+        }
+        .error-message {
+          color: #333;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .url-link {
+          color: #1976d2;
+          text-decoration: none;
+        }
+        .url-link:hover {
+          text-decoration: underline;
+        }
+        .url-link:visited {
+          color: #7b1fa2;
+        }
+        /* Стили для скроллбара */
+        .error-list::-webkit-scrollbar {
+          width: 10px;
+        }
+        .error-list::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 5px;
+        }
+        .error-list::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 5px;
+        }
+        .error-list::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>История ошибок API (${apiErrors.length} из ${MAX_ERRORS})</h1>
+      </div>
+      <div class="error-list">
+        ${errorsHtml}
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Создаём окно для отображения ошибок
+  const errorWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
     title: `История ошибок API (${apiErrors.length} из ${MAX_ERRORS})`,
-    message: `Последние ${apiErrors.length} ошибок:`,
-    detail: errorsText,
-    buttons: ["Закрыть"],
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  // Загружаем HTML-контент
+  errorWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  // Обработка кликов по ссылкам через webContents
+  errorWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  // Обработка навигации (если пользователь кликнет на ссылку)
+  errorWindow.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault();
+    shell.openExternal(url);
   });
 }
 
