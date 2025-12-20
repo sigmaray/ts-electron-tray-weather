@@ -9,6 +9,7 @@ interface Settings {
   country?: string;
   latitude?: number | null;
   longitude?: number | null;
+  updateIntervalInSeconds?: number;
 }
 
 // Определяем путь к settings.json файлу (в корне проекта)
@@ -40,6 +41,7 @@ function loadSettings(): Settings {
       country: "United States",
       latitude: null,
       longitude: null,
+      updateIntervalInSeconds: 60,
     };
     fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2), "utf8");
     console.log(`Создан файл settings.json с дефолтными значениями: ${settingsPath}`);
@@ -50,6 +52,10 @@ function loadSettings(): Settings {
   try {
     const settingsContent = fs.readFileSync(settingsPath, "utf8");
     const settings: Settings = JSON.parse(settingsContent);
+    // Устанавливаем значение по умолчанию для updateIntervalInSeconds, если оно отсутствует
+    if (settings.updateIntervalInSeconds === undefined || settings.updateIntervalInSeconds === null) {
+      settings.updateIntervalInSeconds = 60;
+    }
     console.log(`Загружен файл settings.json: ${settingsPath}`);
     return settings;
   } catch (err) {
@@ -60,6 +66,7 @@ function loadSettings(): Settings {
       country: "United States",
       latitude: null,
       longitude: null,
+      updateIntervalInSeconds: 60,
     };
   }
 }
@@ -75,6 +82,9 @@ const COUNTRY: string | undefined = settings.country;
 // Если указаны CITY и COUNTRY, но не LATITUDE и LONGITUDE, координаты будут определены через API
 let LATITUDE: number | null = settings.latitude ?? null;
 let LONGITUDE: number | null = settings.longitude ?? null;
+
+// Интервал обновления температуры в секундах (по умолчанию 60)
+const UPDATE_INTERVAL_SECONDS: number = settings.updateIntervalInSeconds ?? 60;
 
 // Open-Meteo API (без ключа, бесплатно)
 let WEATHER_URL = "";
@@ -1076,10 +1086,12 @@ async function createTray() {
 
   void updateTrayTemperature();
 
-  // Обновление раз в минуту
+  // Обновление с интервалом из настроек
+  const updateIntervalMs = UPDATE_INTERVAL_SECONDS * 1000;
+  console.log(`Интервал обновления температуры: ${UPDATE_INTERVAL_SECONDS} секунд (${updateIntervalMs} мс)`);
   updateInterval = setInterval(() => {
     void updateTrayTemperature();
-  }, 60 * 1000);
+  }, updateIntervalMs);
 }
 
 app.whenReady().then(async () => {

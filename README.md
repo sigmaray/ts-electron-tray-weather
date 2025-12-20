@@ -67,7 +67,8 @@ npm start
   "city": "New York City",
   "country": "United States",
   "latitude": null,
-  "longitude": null
+  "longitude": null,
+  "updateIntervalInSeconds": 60
 }
 ```
 
@@ -82,11 +83,24 @@ npm start
   "city": null,
   "country": null,
   "latitude": 40.71427,
-  "longitude": -74.00597
+  "longitude": -74.00597,
+  "updateIntervalInSeconds": 60
 }
 ```
 
 Название города и страны будут определены автоматически по координатам.
+
+### Настройка интервала обновления
+
+Поле `updateIntervalInSeconds` определяет, как часто обновляется температура (в секундах). Значение по умолчанию: `60` (1 минута).
+
+Пример для обновления каждые 30 секунд:
+
+```json
+{
+  "updateIntervalInSeconds": 30
+}
+```
 
 ## Отображение информации
 
