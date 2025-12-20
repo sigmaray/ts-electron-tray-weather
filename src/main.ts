@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell } from "electron";
+import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell, ipcMain } from "electron";
 import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -72,19 +72,19 @@ function loadSettings(): Settings {
 }
 
 // Загружаем настройки
-const settings = loadSettings();
+let settings = loadSettings();
 
 // Читаем настройки местоположения из settings.json
 // Можно указать ЛИБО координаты (latitude, longitude), ЛИБО город и страну (city, country)
-const CITY: string | undefined = settings.city;
-const COUNTRY: string | undefined = settings.country;
+let CITY: string | undefined = settings.city;
+let COUNTRY: string | undefined = settings.country;
 
 // Если указаны CITY и COUNTRY, но не LATITUDE и LONGITUDE, координаты будут определены через API
 let LATITUDE: number | null = settings.latitude ?? null;
 let LONGITUDE: number | null = settings.longitude ?? null;
 
 // Интервал обновления температуры в секундах (по умолчанию 60)
-const UPDATE_INTERVAL_SECONDS: number = settings.updateIntervalInSeconds ?? 60;
+let UPDATE_INTERVAL_SECONDS: number = settings.updateIntervalInSeconds ?? 60;
 
 // Open-Meteo API (без ключа, бесплатно)
 let WEATHER_URL = "";
@@ -215,6 +215,616 @@ function isUrl(text: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Сохраняет настройки в файл settings.json
+ */
+function saveSettings(newSettings: Settings): boolean {
+  try {
+    const settingsPath = getSettingsPath();
+    fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2), "utf8");
+    console.log(`Настройки сохранены в файл: ${settingsPath}`);
+    return true;
+  } catch (err) {
+    console.error("Ошибка при сохранении settings.json:", err);
+    return false;
+  }
+}
+
+/**
+ * Применяет новые настройки и переинициализирует приложение
+ */
+async function applySettings(newSettings: Settings): Promise<boolean> {
+  // Сохраняем текущие настройки для возможного отката
+  const previousSettings = { ...settings };
+  const previousCity = CITY;
+  const previousCountry = COUNTRY;
+  const previousLatitude = LATITUDE;
+  const previousLongitude = LONGITUDE;
+  const previousUpdateInterval = UPDATE_INTERVAL_SECONDS;
+  const previousWeatherUrl = WEATHER_URL;
+  const previousCityName = cityName;
+  const previousCountryName = countryName;
+
+  // Объединяем с текущими настройками (на случай частичного обновления)
+  const mergedSettings: Settings = {
+    ...settings,
+    ...newSettings,
+  };
+
+  // Обновляем глобальные переменные
+  CITY = mergedSettings.city;
+  COUNTRY = mergedSettings.country;
+  LATITUDE = mergedSettings.latitude ?? null;
+  LONGITUDE = mergedSettings.longitude ?? null;
+  UPDATE_INTERVAL_SECONDS = mergedSettings.updateIntervalInSeconds ?? 60;
+  settings = mergedSettings;
+
+  // Сохраняем в файл
+  if (!saveSettings(mergedSettings)) {
+    // Откатываем изменения при ошибке сохранения
+    CITY = previousCity;
+    COUNTRY = previousCountry;
+    LATITUDE = previousLatitude;
+    LONGITUDE = previousLongitude;
+    UPDATE_INTERVAL_SECONDS = previousUpdateInterval;
+    WEATHER_URL = previousWeatherUrl;
+    cityName = previousCityName;
+    countryName = previousCountryName;
+    settings = previousSettings;
+    return false;
+  }
+
+  // Переинициализируем местоположение
+  const initialized = await initializeLocation();
+  if (!initialized) {
+    // Откатываем изменения при ошибке инициализации
+    CITY = previousCity;
+    COUNTRY = previousCountry;
+    LATITUDE = previousLatitude;
+    LONGITUDE = previousLongitude;
+    UPDATE_INTERVAL_SECONDS = previousUpdateInterval;
+    WEATHER_URL = previousWeatherUrl;
+    cityName = previousCityName;
+    countryName = previousCountryName;
+    settings = previousSettings;
+    // Восстанавливаем файл с предыдущими настройками
+    saveSettings(previousSettings);
+    // НЕ переинициализируем местоположение - оставляем текущее состояние
+    // Приложение продолжит работать с предыдущими настройками
+    console.log("Откат изменений выполнен. Приложение продолжает работать с предыдущими настройками.");
+    return false;
+  }
+
+  // Обновляем интервал обновления
+  if (updateInterval) {
+    clearInterval(updateInterval);
+  }
+  const updateIntervalMs = UPDATE_INTERVAL_SECONDS * 1000;
+  console.log(`Интервал обновления температуры обновлён: ${UPDATE_INTERVAL_SECONDS} секунд (${updateIntervalMs} мс)`);
+  updateInterval = setInterval(() => {
+    void updateTrayTemperature();
+  }, updateIntervalMs);
+
+  // Обновляем температуру сразу
+  void updateTrayTemperature();
+
+  return true;
+}
+
+/**
+ * Валидирует настройки
+ */
+function validateSettings(newSettings: Partial<Settings>): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // Валидация updateIntervalInSeconds
+  if (newSettings.updateIntervalInSeconds !== undefined && newSettings.updateIntervalInSeconds !== null) {
+    if (typeof newSettings.updateIntervalInSeconds !== "number" || isNaN(newSettings.updateIntervalInSeconds)) {
+      errors.push("Интервал обновления должен быть числом");
+    } else if (newSettings.updateIntervalInSeconds < 1) {
+      errors.push("Интервал обновления должен быть не менее 1 секунды");
+    }
+  }
+
+  // Валидация latitude
+  if (newSettings.latitude !== undefined && newSettings.latitude !== null) {
+    if (typeof newSettings.latitude !== "number" || isNaN(newSettings.latitude)) {
+      errors.push("Широта должна быть числом");
+    } else if (newSettings.latitude < -90 || newSettings.latitude > 90) {
+      errors.push("Широта должна быть в диапазоне от -90 до 90");
+    }
+  }
+
+  // Валидация longitude
+  if (newSettings.longitude !== undefined && newSettings.longitude !== null) {
+    if (typeof newSettings.longitude !== "number" || isNaN(newSettings.longitude)) {
+      errors.push("Долгота должна быть числом");
+    } else if (newSettings.longitude < -180 || newSettings.longitude > 180) {
+      errors.push("Долгота должна быть в диапазоне от -180 до 180");
+    }
+  }
+
+  // Валидация city
+  if (newSettings.city !== undefined && newSettings.city !== null && newSettings.city.trim() === "") {
+    errors.push("Город не может быть пустой строкой (используйте null для очистки)");
+  }
+
+  // Валидация country
+  if (newSettings.country !== undefined && newSettings.country !== null && newSettings.country.trim() === "") {
+    errors.push("Страна не может быть пустой строкой (используйте null для очистки)");
+  }
+
+  // Проверка: должны быть указаны либо координаты, либо город и страна
+  // Объединяем с текущими настройками для проверки
+  const mergedForValidation: Settings = {
+    ...settings,
+    ...newSettings,
+  };
+
+  const hasCoordinates = mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined &&
+                         mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined;
+  const hasCityCountry = mergedForValidation.city && mergedForValidation.country && 
+                         mergedForValidation.city.trim() !== "" && mergedForValidation.country.trim() !== "";
+
+  if (!hasCoordinates && !hasCityCountry) {
+    errors.push("Необходимо указать либо координаты (широта и долгота), либо город и страну");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Показывает диалог настроек для редактирования settings.json
+ */
+function showSettings(): void {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Настройки</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-size: 14px;
+          line-height: 1.5;
+          color: #333;
+          background: #f5f5f5;
+          padding: 20px;
+        }
+        .container {
+          max-width: 600px;
+          margin: 0 auto;
+          background: #fff;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          padding: 24px;
+        }
+        h1 {
+          font-size: 20px;
+          font-weight: 600;
+          color: #1976d2;
+          margin-bottom: 20px;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #e0e0e0;
+        }
+        .form-group {
+          margin-bottom: 20px;
+        }
+        label {
+          display: block;
+          font-weight: 500;
+          margin-bottom: 6px;
+          color: #424242;
+        }
+        .label-hint {
+          font-size: 12px;
+          color: #757575;
+          font-weight: normal;
+          margin-left: 4px;
+        }
+        input[type="text"],
+        input[type="number"] {
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 14px;
+          transition: border-color 0.2s;
+        }
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+          outline: none;
+          border-color: #1976d2;
+          box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+        }
+        input.error {
+          border-color: #d32f2f;
+        }
+        .error-message {
+          color: #d32f2f;
+          font-size: 12px;
+          margin-top: 4px;
+          display: none;
+        }
+        .error-message.show {
+          display: block;
+        }
+        .checkbox-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+        }
+        .buttons {
+          display: flex;
+          gap: 12px;
+          justify-content: flex-end;
+          margin-top: 24px;
+          padding-top: 20px;
+          border-top: 1px solid #e0e0e0;
+        }
+        button {
+          padding: 10px 24px;
+          border: none;
+          border-radius: 4px;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        }
+        button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .btn-cancel {
+          background: #f5f5f5;
+          color: #424242;
+        }
+        .btn-cancel:hover:not(:disabled) {
+          background: #e0e0e0;
+        }
+        .btn-save {
+          background: #1976d2;
+          color: #fff;
+        }
+        .btn-save:hover:not(:disabled) {
+          background: #1565c0;
+        }
+        .validation-errors {
+          background: #ffebee;
+          border: 1px solid #d32f2f;
+          border-radius: 4px;
+          padding: 12px;
+          margin-bottom: 20px;
+          display: none;
+        }
+        .validation-errors.show {
+          display: block;
+        }
+        .validation-errors h3 {
+          color: #d32f2f;
+          font-size: 14px;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .validation-errors ul {
+          margin-left: 20px;
+          color: #c62828;
+        }
+        .validation-errors li {
+          margin-bottom: 4px;
+        }
+        .info-box {
+          background: #e3f2fd;
+          border: 1px solid #1976d2;
+          border-radius: 4px;
+          padding: 12px;
+          margin-bottom: 20px;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+        .info-box h3 {
+          color: #1976d2;
+          font-size: 14px;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .info-box p {
+          color: #424242;
+          margin-bottom: 6px;
+        }
+        .info-box p:last-child {
+          margin-bottom: 0;
+        }
+        .info-box code {
+          background: rgba(25, 118, 210, 0.1);
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-family: "Courier New", monospace;
+          font-size: 12px;
+          color: #1565c0;
+        }
+        .info-box ul {
+          margin-left: 20px;
+          margin-top: 6px;
+          color: #424242;
+        }
+        .info-box li {
+          margin-bottom: 4px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>⚙️ Настройки</h1>
+        
+        <div class="info-box">
+          <h3>ℹ️ Важная информация</h3>
+          <p><strong>Необходимо указать один из вариантов:</strong></p>
+          <ul>
+            <li><strong>Город и Страна</strong> — координаты будут определены автоматически</li>
+            <li><strong>Широта и Долгота</strong> — координаты указываются вручную</li>
+          </ul>
+          <p style="margin-top: 12px;">
+            <strong>Файл настроек:</strong> <code>${getSettingsPath()}</code>
+          </p>
+        </div>
+        
+        <div id="validationErrors" class="validation-errors">
+          <h3>Ошибки валидации:</h3>
+          <ul id="validationErrorsList"></ul>
+        </div>
+
+        <form id="settingsForm">
+          <div class="form-group">
+            <label>
+              Город
+              <span class="label-hint">(например: "Minsk" или оставьте пустым)</span>
+            </label>
+            <input type="text" id="city" placeholder="Введите название города">
+            <div class="error-message" id="cityError"></div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              Страна
+              <span class="label-hint">(например: "Belarus" или оставьте пустым)</span>
+            </label>
+            <input type="text" id="country" placeholder="Введите название страны">
+            <div class="error-message" id="countryError"></div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              Широта (Latitude)
+              <span class="label-hint">(от -90 до 90, или оставьте пустым)</span>
+            </label>
+            <input type="number" id="latitude" step="any" placeholder="Например: 53.9045">
+            <div class="error-message" id="latitudeError"></div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              Долгота (Longitude)
+              <span class="label-hint">(от -180 до 180, или оставьте пустым)</span>
+            </label>
+            <input type="number" id="longitude" step="any" placeholder="Например: 27.5615">
+            <div class="error-message" id="longitudeError"></div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              Интервал обновления (секунды)
+              <span class="label-hint">(минимум 1 секунда)</span>
+            </label>
+            <input type="number" id="updateInterval" min="1" step="1" placeholder="60">
+            <div class="error-message" id="updateIntervalError"></div>
+          </div>
+
+          <div class="buttons">
+            <button type="button" class="btn-cancel" id="cancelBtn">Отмена</button>
+            <button type="submit" class="btn-save" id="saveBtn">Сохранить</button>
+          </div>
+        </form>
+      </div>
+
+      <script>
+        const { ipcRenderer } = require('electron');
+        
+        // Загружаем текущие настройки
+        const currentSettings = ${JSON.stringify(settings)};
+        
+        // Заполняем форму текущими значениями
+        document.getElementById('city').value = currentSettings.city || '';
+        document.getElementById('country').value = currentSettings.country || '';
+        document.getElementById('latitude').value = currentSettings.latitude !== null && currentSettings.latitude !== undefined ? currentSettings.latitude : '';
+        document.getElementById('longitude').value = currentSettings.longitude !== null && currentSettings.longitude !== undefined ? currentSettings.longitude : '';
+        document.getElementById('updateInterval').value = currentSettings.updateIntervalInSeconds || 60;
+
+        function clearErrors() {
+          document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
+          document.querySelectorAll('input').forEach(el => el.classList.remove('error'));
+          document.getElementById('validationErrors').classList.remove('show');
+        }
+
+        function showFieldError(fieldId, message) {
+          const field = document.getElementById(fieldId);
+          const errorEl = document.getElementById(fieldId + 'Error');
+          field.classList.add('error');
+          errorEl.textContent = message;
+          errorEl.classList.add('show');
+        }
+
+        function showValidationErrors(errors) {
+          const container = document.getElementById('validationErrors');
+          const list = document.getElementById('validationErrorsList');
+          list.innerHTML = errors.map(err => '<li>' + err + '</li>').join('');
+          container.classList.add('show');
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', (e) => {
+          e.preventDefault();
+          clearErrors();
+
+          // Собираем данные формы
+          const cityValue = document.getElementById('city').value.trim();
+          const countryValue = document.getElementById('country').value.trim();
+          const latitudeValue = document.getElementById('latitude').value.trim();
+          const longitudeValue = document.getElementById('longitude').value.trim();
+          const updateIntervalValue = document.getElementById('updateInterval').value.trim();
+
+          const newSettings = {
+            city: cityValue === '' ? null : cityValue,
+            country: countryValue === '' ? null : countryValue,
+            latitude: latitudeValue === '' ? null : (isNaN(parseFloat(latitudeValue)) ? null : parseFloat(latitudeValue)),
+            longitude: longitudeValue === '' ? null : (isNaN(parseFloat(longitudeValue)) ? null : parseFloat(longitudeValue)),
+            updateIntervalInSeconds: updateIntervalValue === '' ? 60 : parseInt(updateIntervalValue, 10),
+          };
+
+          // Валидация на стороне клиента (базовая)
+          const validation = {
+            valid: true,
+            errors: []
+          };
+
+          if (newSettings.updateIntervalInSeconds < 1 || isNaN(newSettings.updateIntervalInSeconds)) {
+            validation.valid = false;
+            validation.errors.push('Интервал обновления должен быть не менее 1 секунды');
+            showFieldError('updateInterval', 'Интервал должен быть не менее 1 секунды');
+          }
+
+          if (newSettings.latitude !== null && (isNaN(newSettings.latitude) || newSettings.latitude < -90 || newSettings.latitude > 90)) {
+            validation.valid = false;
+            validation.errors.push('Широта должна быть числом от -90 до 90');
+            showFieldError('latitude', 'Широта должна быть от -90 до 90');
+          }
+
+          if (newSettings.longitude !== null && (isNaN(newSettings.longitude) || newSettings.longitude < -180 || newSettings.longitude > 180)) {
+            validation.valid = false;
+            validation.errors.push('Долгота должна быть числом от -180 до 180');
+            showFieldError('longitude', 'Долгота должна быть от -180 до 180');
+          }
+
+          const hasCoordinates = newSettings.latitude !== null && newSettings.longitude !== null;
+          const hasCityCountry = newSettings.city && newSettings.country;
+
+          if (!hasCoordinates && !hasCityCountry) {
+            validation.valid = false;
+            validation.errors.push('Необходимо указать либо координаты, либо город и страну');
+          }
+
+          if (!validation.valid) {
+            showValidationErrors(validation.errors);
+            return;
+          }
+
+          // Отправляем настройки в главный процесс для валидации и сохранения
+          ipcRenderer.send('save-settings', newSettings);
+        });
+
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+          window.close();
+        });
+
+        // Обработка ответов от главного процесса
+        ipcRenderer.on('settings-saved', () => {
+          window.close();
+        });
+
+        ipcRenderer.on('settings-error', (event, errors) => {
+          showValidationErrors(errors);
+        });
+      </script>
+    </body>
+    </html>
+  `;
+
+  // Создаём окно для настроек
+  const settingsWindow = new BrowserWindow({
+    width: 650,
+    height: 600,
+    title: "Настройки — Tray Weather",
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+    resizable: true,
+    modal: false,
+  });
+
+  // Загружаем HTML-контент
+  settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  // Обработка сохранения настроек
+  // Удаляем предыдущие обработчики для этого окна, если они есть
+  const handler = async (event: any, newSettings: Partial<Settings>) => {
+    // Проверяем, что событие пришло от нашего окна
+    if (event.sender !== settingsWindow.webContents) {
+      return;
+    }
+
+    // Валидация на стороне сервера
+    const validation = validateSettings(newSettings);
+    
+    if (!validation.valid) {
+      event.sender.send('settings-error', validation.errors);
+      return;
+    }
+
+    // Применяем настройки
+    const success = await applySettings(newSettings as Settings);
+    
+    if (success) {
+      event.sender.send('settings-saved');
+      // Удаляем обработчик после успешного сохранения
+      ipcMain.removeListener('save-settings', handler);
+      dialog.showMessageBox(settingsWindow, {
+        type: 'info',
+        title: 'Настройки сохранены',
+        message: 'Настройки успешно сохранены и применены.',
+        buttons: ['OK'],
+      }).then(() => {
+        settingsWindow.close();
+      });
+    } else {
+      // При ошибке показываем сообщение, но не закрываем окно настроек
+      // чтобы пользователь мог исправить данные
+      // Приложение продолжает работать с предыдущими настройками
+      const errorMessage = 'Не удалось применить настройки. Проверьте правильность введённых данных (координаты или город и страна). Приложение продолжит работать с предыдущими настройками.';
+      event.sender.send('settings-error', [errorMessage]);
+      // Показываем диалог асинхронно, чтобы не блокировать выполнение
+      dialog.showMessageBox(settingsWindow, {
+        type: 'error',
+        title: 'Ошибка применения настроек',
+        message: errorMessage,
+        buttons: ['OK'],
+      }).catch((err) => {
+        console.error('Ошибка при показе диалога:', err);
+      });
+    }
+  };
+
+  ipcMain.on('save-settings', handler);
+
+  // Удаляем обработчик при закрытии окна
+  settingsWindow.on('closed', () => {
+    ipcMain.removeListener('save-settings', handler);
+  });
 }
 
 /**
@@ -1047,6 +1657,13 @@ async function updateTrayTemperature() {
   });
   menuItems.push({ type: "separator" });
   menuItems.push({
+    label: "Настройки",
+    click: () => {
+      showSettings();
+    },
+  });
+  menuItems.push({ type: "separator" });
+  menuItems.push({
     label: "Как пользоваться",
     click: () => {
       showHelp();
@@ -1093,6 +1710,13 @@ async function createTray() {
     void updateTrayTemperature();
   }, updateIntervalMs);
 }
+
+// Предотвращаем автоматическое закрытие приложения при закрытии всех окон
+// Нам нужен только трей, окна не обязательны
+app.on("window-all-closed", () => {
+  // Не закрываем приложение, так как у нас есть трей
+  // app.quit() будет вызван только явно через меню "Выйти"
+});
 
 app.whenReady().then(async () => {
   // Отключаем создание окна — нам нужен только трей.
