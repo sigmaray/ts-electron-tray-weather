@@ -16,6 +16,13 @@ declare module "canvas" {
     fillRect(x: number, y: number, width: number, height: number): void;
     fillText(text: string, x: number, y: number): void;
     strokeText(text: string, x: number, y: number): void;
+    beginPath(): void;
+    arc(x: number, y: number, radius: number, startAngle: number, endAngle: number): void;
+    moveTo(x: number, y: number): void;
+    lineTo(x: number, y: number): void;
+    stroke(): void;
+    fill(): void;
+    closePath(): void;
   }
 }
 

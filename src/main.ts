@@ -90,6 +90,7 @@ let UPDATE_INTERVAL_SECONDS: number = settings.updateIntervalInSeconds ?? 60;
 let WEATHER_URL = "";
 
 let tray: Tray | null = null;
+let weatherTray: Tray | null = null; // Вторая иконка для погодных условий
 let updateInterval: NodeJS.Timeout | null = null;
 let lastUpdateTime: Date | null = null;
 let cityName: string = "";
@@ -1485,7 +1486,12 @@ async function initializeLocation(): Promise<boolean> {
   return false;
 }
 
-async function fetchTemperatureC(): Promise<number | null> {
+interface WeatherData {
+  temperature: number;
+  weathercode: number;
+}
+
+async function fetchWeatherData(): Promise<WeatherData | null> {
   if (!WEATHER_URL) {
     const error = new Error("WEATHER_URL не инициализирован");
     addApiError("Weather API", error);
@@ -1502,7 +1508,13 @@ async function fetchTemperatureC(): Promise<number | null> {
     }
     const data: any = await res.json();
     if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
-      return data.current_weather.temperature;
+      const weathercode = typeof data.current_weather.weathercode === "number" 
+        ? data.current_weather.weathercode 
+        : 0;
+      return {
+        temperature: data.current_weather.temperature,
+        weathercode: weathercode
+      };
     }
     const error = new Error("Неверный формат ответа API: отсутствует температура");
     addApiError("Weather API", error, WEATHER_URL);
@@ -1577,10 +1589,206 @@ function createBaseIcon(): NativeImage {
   return createTemperatureIcon("--");
 }
 
-async function updateTrayTemperature() {
-  if (!tray) return;
+/**
+ * Получает описание погодных условий по weathercode (WMO Weather interpretation codes)
+ */
+function getWeatherDescription(weathercode: number): string {
+  if (weathercode === 0) return "Ясно";
+  if (weathercode >= 1 && weathercode <= 3) return "Облачно";
+  if (weathercode >= 45 && weathercode <= 48) return "Туман";
+  if (weathercode >= 51 && weathercode <= 67) return "Дождь";
+  if (weathercode >= 71 && weathercode <= 77) return "Снег";
+  if (weathercode >= 80 && weathercode <= 99) {
+    if (weathercode >= 95) return "Гроза";
+    if (weathercode >= 85) return "Снегопад";
+    return "Ливень";
+  }
+  return "Неизвестно";
+}
 
-  const temp = await fetchTemperatureC();
+/**
+ * Создаёт иконку погодных условий на основе weathercode
+ */
+function createWeatherIcon(weathercode: number): NativeImage {
+  const size = 22;
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext("2d");
+
+  // Фон
+  ctx.fillStyle = "#4a90e2";
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.lineWidth = 1.5;
+
+  // Рисуем иконку в зависимости от weathercode
+  if (weathercode === 0) {
+    // Ясно - солнце
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = 6;
+    // Круг солнца
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    // Лучи солнца
+    const rayLength = 3;
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const startX = centerX + Math.cos(angle) * (radius + 1);
+      const startY = centerY + Math.sin(angle) * (radius + 1);
+      const endX = centerX + Math.cos(angle) * (radius + rayLength);
+      const endY = centerY + Math.sin(angle) * (radius + rayLength);
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+    }
+  } else if (weathercode >= 1 && weathercode <= 3) {
+    // Облачно - облака
+    // Первое облако
+    ctx.beginPath();
+    ctx.arc(6, 10, 3, 0, Math.PI * 2);
+    ctx.arc(9, 10, 4, 0, Math.PI * 2);
+    ctx.arc(12, 10, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Второе облако
+    ctx.beginPath();
+    ctx.arc(10, 13, 2.5, 0, Math.PI * 2);
+    ctx.arc(13, 13, 3.5, 0, Math.PI * 2);
+    ctx.arc(16, 13, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (weathercode >= 45 && weathercode <= 48) {
+    // Туман - горизонтальные линии
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(4, 8 + i * 3);
+      ctx.lineTo(18, 8 + i * 3);
+      ctx.stroke();
+    }
+  } else if (weathercode >= 51 && weathercode <= 67) {
+    // Дождь - капли
+    // Облако
+    ctx.beginPath();
+    ctx.arc(7, 8, 3, 0, Math.PI * 2);
+    ctx.arc(10, 8, 4, 0, Math.PI * 2);
+    ctx.arc(13, 8, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Капли дождя
+    ctx.beginPath();
+    ctx.moveTo(8, 12);
+    ctx.lineTo(9, 16);
+    ctx.lineTo(7, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(12, 12);
+    ctx.lineTo(13, 16);
+    ctx.lineTo(11, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(15, 12);
+    ctx.lineTo(16, 16);
+    ctx.lineTo(14, 16);
+    ctx.closePath();
+    ctx.fill();
+  } else if (weathercode >= 71 && weathercode <= 77) {
+    // Снег - снежинка
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const length = 5;
+    // Вертикальная и горизонтальная линии
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY - length);
+    ctx.lineTo(centerX, centerY + length);
+    ctx.moveTo(centerX - length, centerY);
+    ctx.lineTo(centerX + length, centerY);
+    ctx.stroke();
+    // Диагональные линии
+    ctx.beginPath();
+    ctx.moveTo(centerX - length * 0.7, centerY - length * 0.7);
+    ctx.lineTo(centerX + length * 0.7, centerY + length * 0.7);
+    ctx.moveTo(centerX - length * 0.7, centerY + length * 0.7);
+    ctx.lineTo(centerX + length * 0.7, centerY - length * 0.7);
+    ctx.stroke();
+  } else if (weathercode >= 80 && weathercode <= 99) {
+    if (weathercode >= 95) {
+      // Гроза - молния
+      // Облако
+      ctx.beginPath();
+      ctx.arc(7, 7, 3, 0, Math.PI * 2);
+      ctx.arc(10, 7, 4, 0, Math.PI * 2);
+      ctx.arc(13, 7, 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Молния
+      ctx.fillStyle = "#FFD700";
+      ctx.beginPath();
+      ctx.moveTo(10, 10);
+      ctx.lineTo(12, 10);
+      ctx.lineTo(11, 13);
+      ctx.lineTo(13, 13);
+      ctx.lineTo(9, 18);
+      ctx.lineTo(11, 15);
+      ctx.lineTo(9, 15);
+      ctx.closePath();
+      ctx.fill();
+    } else if (weathercode >= 85) {
+      // Снегопад - снежинка и снежинки вокруг
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const length = 4;
+      // Центральная снежинка
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY - length);
+      ctx.lineTo(centerX, centerY + length);
+      ctx.moveTo(centerX - length, centerY);
+      ctx.lineTo(centerX + length, centerY);
+      ctx.stroke();
+      // Маленькие снежинки вокруг
+      ctx.beginPath();
+      ctx.arc(5, 5, 1, 0, Math.PI * 2);
+      ctx.arc(17, 8, 1, 0, Math.PI * 2);
+      ctx.arc(6, 17, 1, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Ливень - сильный дождь
+      // Облако
+      ctx.beginPath();
+      ctx.arc(7, 7, 3, 0, Math.PI * 2);
+      ctx.arc(10, 7, 4, 0, Math.PI * 2);
+      ctx.arc(13, 7, 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Много капель
+      ctx.fillStyle = "#87CEEB";
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(6 + i * 2.5, 11);
+        ctx.lineTo(7 + i * 2.5, 17);
+        ctx.lineTo(5 + i * 2.5, 17);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  } else {
+    // Неизвестно - вопросительный знак
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("?", size / 2, size / 2);
+  }
+
+  const buffer = canvas.toBuffer("image/png");
+  return nativeImage.createFromBuffer(buffer);
+}
+
+async function updateTrayTemperature() {
+  if (!tray || !weatherTray) return;
+
+  const weatherData = await fetchWeatherData();
+  const temp = weatherData?.temperature ?? null;
+  const weathercode = weatherData?.weathercode ?? 0;
   const label = temp !== null ? `${temp.toFixed(1)} °C` : "N/A";
 
   // Обновляем время последнего успешного обновления, если температура получена успешно
@@ -1592,10 +1800,14 @@ async function updateTrayTemperature() {
   const shortLabel =
     temp !== null ? `${Math.round(temp)}°` : "NA";
 
-  // Обновляем саму иконку: рисуем температуру как текст
+  // Обновляем первую иконку: рисуем температуру как текст
   const iconWithTemp = createTemperatureIcon(shortLabel);
   tray.setImage(iconWithTemp);
 
+  // Обновляем вторую иконку: рисуем погодные условия
+  const weatherIcon = createWeatherIcon(weathercode);
+  weatherTray.setImage(weatherIcon);
+  
   // Форматируем время последнего обновления с секундами
   let timeString = "";
   if (lastUpdateTime) {
@@ -1605,9 +1817,13 @@ async function updateTrayTemperature() {
     timeString = ` (обновлено: ${hours}:${minutes}:${seconds})`;
   }
 
-  // Tooltip при наведении
+  // Tooltip при наведении для первой иконки
   const locationString = cityName && countryName ? `${cityName}, ${countryName}\n` : "";
   tray.setToolTip(`${locationString}Температура: ${label}${timeString}`);
+
+  // Устанавливаем tooltip для второй иконки
+  const weatherDescription = getWeatherDescription(weathercode);
+  weatherTray.setToolTip(`${locationString}Погода: ${weatherDescription}${timeString}`);
 
   // Попытка отобразить текст прямо в трее (полноценно работает в macOS).
   try {
@@ -1616,10 +1832,14 @@ async function updateTrayTemperature() {
     // На Linux/Windows может быть проигнорировано.
   }
 
-  // Формируем пункты меню
+  // Формируем пункты меню для первой иконки (температура)
   const menuItems: any[] = [
     {
       label: `Текущая температура: ${label}`,
+      enabled: false,
+    },
+    {
+      label: `Погода: ${getWeatherDescription(weathercode)}`,
       enabled: false,
     },
     { type: "separator" },
@@ -1704,8 +1924,93 @@ async function updateTrayTemperature() {
   });
 
   const contextMenu = Menu.buildFromTemplate(menuItems);
-
   tray.setContextMenu(contextMenu);
+
+  // Создаём такое же меню для второй иконки (погодные условия)
+  const weatherMenuItems: any[] = [
+    {
+      label: `Погода: ${getWeatherDescription(weathercode)}`,
+      enabled: false,
+    },
+    {
+      label: `Текущая температура: ${label}`,
+      enabled: false,
+    },
+    { type: "separator" },
+  ];
+
+  // Добавляем время последнего обновления, если оно есть
+  if (lastUpdateTime) {
+    const hours = lastUpdateTime.getHours().toString().padStart(2, "0");
+    const minutes = lastUpdateTime.getMinutes().toString().padStart(2, "0");
+    const seconds = lastUpdateTime.getSeconds().toString().padStart(2, "0");
+    weatherMenuItems.push({
+      label: `Обновлено: ${hours}:${minutes}:${seconds}`,
+      enabled: false,
+    });
+    weatherMenuItems.push({ type: "separator" });
+  }
+
+  // Добавляем координаты, если они определены
+  if (LATITUDE !== null && LONGITUDE !== null) {
+    weatherMenuItems.push({
+      label: `Координаты: ${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}`,
+      enabled: false,
+    });
+    weatherMenuItems.push({ type: "separator" });
+  }
+
+  // Добавляем город и страну, если они доступны
+  if (cityName && countryName) {
+    weatherMenuItems.push({
+      label: `Город: ${cityName}`,
+      enabled: false,
+    });
+    weatherMenuItems.push({
+      label: `Страна: ${countryName}`,
+      enabled: false,
+    });
+    weatherMenuItems.push({ type: "separator" });
+  }
+
+  // Добавляем действия
+  weatherMenuItems.push({
+    label: "Обновить сейчас",
+    click: () => {
+      void updateTrayTemperature();
+    },
+  });
+  weatherMenuItems.push({ type: "separator" });
+  weatherMenuItems.push({
+    label: "Настройки",
+    click: () => {
+      showSettings();
+    },
+  });
+  weatherMenuItems.push({ type: "separator" });
+  weatherMenuItems.push({
+    label: "Как пользоваться",
+    click: () => {
+      showHelp();
+    },
+  });
+  weatherMenuItems.push({ type: "separator" });
+  weatherMenuItems.push({
+    label: `Показать ошибки API${apiErrors.length > 0 ? ` (${apiErrors.length})` : ""}`,
+    click: () => {
+      showApiErrors();
+    },
+  });
+  weatherMenuItems.push({ type: "separator" });
+  weatherMenuItems.push({
+    label: "Выйти",
+    click: () => {
+      app.quit();
+    },
+  });
+
+  const weatherContextMenu = Menu.buildFromTemplate(weatherMenuItems);
+  weatherTray.setContextMenu(weatherContextMenu);
 }
 
 async function createTray() {
@@ -1717,8 +2022,13 @@ async function createTray() {
     return;
   }
 
+  // Создаём первую иконку (температура)
   const baseIcon = createBaseIcon();
   tray = new Tray(baseIcon);
+
+  // Создаём вторую иконку (погодные условия)
+  const baseWeatherIcon = createWeatherIcon(0); // Начальная иконка - ясно
+  weatherTray = new Tray(baseWeatherIcon);
 
   void updateTrayTemperature();
 
@@ -1750,6 +2060,10 @@ app.on("before-quit", () => {
   if (tray) {
     tray.destroy();
     tray = null;
+  }
+  if (weatherTray) {
+    weatherTray.destroy();
+    weatherTray = null;
   }
 });
 
