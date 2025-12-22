@@ -1373,7 +1373,7 @@ function showApiErrors(): void {
  */
 async function fetchCoordinatesByCity(city: string, country: string): Promise<{ latitude: number; longitude: number; cityName: string; countryName: string } | null> {
   // Используем count=10 чтобы получить больше результатов и найти наиболее подходящий
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=10&language=ru`;
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=10&language=en`;
   console.log({url});
   try {
     const res = await fetch(url);
@@ -1384,14 +1384,38 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     }
     const data: any = await res.json();
     if (data && data.results && data.results.length > 0) {
-      // Ищем точное совпадение по названию города (регистронезависимо)
-      const cityLower = city.toLowerCase();
-      const exactMatch = data.results.find((loc: any) => 
-        loc.name && loc.name.toLowerCase() === cityLower
+      // Нормализуем названия для сравнения
+      const cityLower = city.toLowerCase().trim();
+      const countryLower = country.toLowerCase().trim();
+      
+      // Функция для нормализации названия страны (убираем лишние пробелы, приводим к нижнему регистру)
+      const normalizeCountry = (countryName: string): string => {
+        return countryName.toLowerCase().trim();
+      };
+      
+      // Сначала ищем точное совпадение по городу И стране
+      const exactMatchWithCountry = data.results.find((loc: any) => {
+        const locCity = loc.name ? loc.name.toLowerCase().trim() : "";
+        const locCountry = loc.country ? normalizeCountry(loc.country) : "";
+        return locCity === cityLower && locCountry === countryLower;
+      });
+      
+      if (exactMatchWithCountry) {
+        return {
+          latitude: exactMatchWithCountry.latitude,
+          longitude: exactMatchWithCountry.longitude,
+          cityName: exactMatchWithCountry.name || city,
+          countryName: exactMatchWithCountry.country || country,
+        };
+      }
+      
+      // Если не нашли точное совпадение по городу и стране, ищем точное совпадение только по городу
+      const exactMatchCity = data.results.find((loc: any) => 
+        loc.name && loc.name.toLowerCase().trim() === cityLower
       );
       
-      // Если нашли точное совпадение, используем его, иначе берём первый результат
-      const location = exactMatch || data.results[0];
+      // Если нашли точное совпадение по городу, используем его, иначе берём первый результат
+      const location = exactMatchCity || data.results[0];
       
       return {
         latitude: location.latitude,
