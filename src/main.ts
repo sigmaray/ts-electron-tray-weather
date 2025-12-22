@@ -1539,21 +1539,17 @@ function createTemperatureIcon(text: string): NativeImage {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
-  // Определяем цвет в зависимости от состояния
-  let bgColor: string;
-  let textColor: string = "#FFFFFF";
+  // Прозрачный фон (не рисуем фон, canvas по умолчанию прозрачный)
+  // Определяем цвет текста в зависимости от состояния
+  let textColor: string;
 
   if (text === "--" || text === "NA") {
-    // Прочерк или ошибка: серый
-    bgColor = "#808080";
+    // Прочерк или ошибка: светло-серый
+    textColor = "#999999";
   } else {
-    // Активная температура: яркий синий
-    bgColor = "#1e88e5";
+    // Активная температура: темно-серый
+    textColor = "#424242";
   }
-
-  // Рисуем фон
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, size, size);
 
   // Настройки текста
   ctx.fillStyle = textColor;
