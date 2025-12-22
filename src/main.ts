@@ -1664,8 +1664,15 @@ let emojiCacheInitialized = false;
 
 /**
  * Инициализирует кэш цветных emoji используя BrowserWindow
+ * Кэш используется только на Linux
  */
 async function initializeEmojiCache(): Promise<void> {
+  // Используем кэш только на Linux
+  if (!isLinux) {
+    emojiCacheInitialized = true;
+    return;
+  }
+  
   if (emojiCacheInitialized) return;
   
   // Используем больший размер для лучшего качества, затем масштабируем
@@ -1745,8 +1752,8 @@ async function initializeEmojiCache(): Promise<void> {
 function createWeatherIcon(weathercode: number): NativeImage {
   const targetSize = isWindows ? 16 : 32;
   
-  // Проверяем кэш цветных emoji
-  if (emojiIconCache.has(weathercode)) {
+  // Проверяем кэш цветных emoji только на Linux
+  if (isLinux && emojiIconCache.has(weathercode)) {
     const cachedImage = emojiIconCache.get(weathercode)!;
     // Убеждаемся, что размер правильный
     const size = cachedImage.getSize();
