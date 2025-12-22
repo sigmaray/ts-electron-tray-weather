@@ -1689,7 +1689,7 @@ function createTemperatureIcon(text: string): NativeImage {
 
   // Настройки текста
   ctx.fillStyle = textColor;
-  const fontSize = size * 0.75;
+  const fontSize = size * (isWindows ? 0.5 : 0.75);
   ctx.font = `bold ${fontSize}px Arial`; // Увеличил размер шрифта пропорционально размеру canvas
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
