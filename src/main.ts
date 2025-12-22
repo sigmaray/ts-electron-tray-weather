@@ -1652,31 +1652,117 @@ function getWeatherEmoji(weathercode: number): string {
   }
 }
 
+// Кэш для иконок emoji
+let emojiIconCache: Map<number, NativeImage> = new Map();
+let emojiCacheInitialized = false;
+
 /**
- * Создаёт иконку погодных условий на основе weathercode, используя emoji
+ * Инициализирует кэш цветных emoji используя BrowserWindow
+ */
+async function initializeEmojiCache(): Promise<void> {
+  if (emojiCacheInitialized) return;
+  
+  const size = 32;
+  const weatherCodes = [0, 1, 2, 3, 45, 51, 56, 61, 66, 71, 80, 85, 95];
+  
+  // Создаём временное скрытое окно для рендеринга цветных emoji
+  const tempWindow = new BrowserWindow({
+    width: size,
+    height: size,
+    show: false,
+    transparent: true,
+    frame: false,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  for (const code of weatherCodes) {
+    const emoji = getWeatherEmoji(code);
+    
+    // HTML для отображения emoji
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body {
+            margin: 0;
+            padding: 0;
+            width: ${size}px;
+            height: ${size}px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            font-size: 24px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+          }
+        </style>
+      </head>
+      <body>${emoji}</body>
+      </html>
+    `;
+
+    await new Promise<void>((resolve) => {
+      tempWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      tempWindow.webContents.once("did-finish-load", () => {
+        setTimeout(() => {
+          tempWindow.capturePage().then((image) => {
+            emojiIconCache.set(code, image);
+            resolve();
+          }).catch(() => {
+            resolve(); // Пропускаем если не удалось
+          });
+        }, 50);
+      });
+    });
+  }
+  
+  tempWindow.close();
+  emojiCacheInitialized = true;
+}
+
+/**
+ * Создаёт иконку погодных условий на основе weathercode, используя цветные emoji
  */
 function createWeatherIcon(weathercode: number): NativeImage {
-  const size = 32; // Увеличиваем размер для лучшей видимости emoji
+  const emoji = getWeatherEmoji(weathercode);
+  const size = 32;
+  
+  // Проверяем кэш цветных emoji
+  if (emojiIconCache.has(weathercode)) {
+    return emojiIconCache.get(weathercode)!;
+  }
+  
+  // Fallback: используем canvas (emoji будут серыми, но это лучше чем ничего)
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
-
-  // Прозрачный фон (не рисуем фон, canvas по умолчанию прозрачный)
   
-  // Получаем emoji для погодных условий
-  const emoji = getWeatherEmoji(weathercode);
+  // Пробуем использовать системные шрифты с поддержкой emoji
+  const platform = os.platform();
+  let fontFamily = "Arial";
+  if (platform === "darwin") {
+    fontFamily = "Apple Color Emoji";
+  } else if (platform === "win32") {
+    fontFamily = "Segoe UI Emoji";
+  } else {
+    fontFamily = "Noto Color Emoji";
+  }
   
-  // Настройки текста для emoji
-  ctx.font = "bold 24px Arial"; // Увеличенный размер шрифта для emoji
+  ctx.font = `bold 24px ${fontFamily}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
   // Рисуем emoji по центру
-  const textX = size / 2;
-  const textY = size / 2;
-  ctx.fillText(emoji, textX, textY);
+  ctx.fillText(emoji, size / 2, size / 2);
 
   const buffer = canvas.toBuffer("image/png");
-  return nativeImage.createFromBuffer(buffer);
+  const image = nativeImage.createFromBuffer(buffer);
+  
+  return image;
 }
 
 async function updateTrayTemperature() {
@@ -1944,6 +2030,8 @@ app.on("window-all-closed", () => {
 });
 
 app.whenReady().then(async () => {
+  // Инициализируем кэш цветных emoji перед созданием трея
+  await initializeEmojiCache();
   // Отключаем создание окна — нам нужен только трей.
   await createTray();
 });
