@@ -27,6 +27,20 @@
 
 Скачать `Tray.Weather-1.0.0-win.zip`, разархивировать, запустить exe-файл ("Tray Weather.exe")
 
+Windows может ругнуться на запуск программы из непроверенного источника
+
+<img width="543" height="511" alt="image" src="https://github.com/user-attachments/assets/38307104-44eb-4c69-9c04-3b2c6dc8bd59" />
+
+<img width="550" height="513" alt="image" src="https://github.com/user-attachments/assets/8d45a49a-f903-4c33-9de8-415e459fd419" />
+
+В Windows может быть необходимо включить скрытую иконку
+
+<img width="347" height="183" alt="image" src="https://github.com/user-attachments/assets/68d214cb-0987-4f60-9202-3e05355643dd" />
+
+<img width="829" height="695" alt="image" src="https://github.com/user-attachments/assets/3e213de5-9a2e-4799-8229-d8d264395622" />
+
+<img width="750" height="59" alt="image" src="https://github.com/user-attachments/assets/1269f01a-0b25-4c04-8a19-5db5ee24a44d" />
+
 ### macOS
 
 Использовать архив `Tray.Weather-1.0.0-mac.zip`
