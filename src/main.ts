@@ -1603,174 +1603,77 @@ function getWeatherDescription(weathercode: number): string {
 }
 
 /**
- * Создаёт иконку погодных условий на основе weathercode
+ * Получает emoji для погодных условий на основе weathercode
+ */
+function getWeatherEmoji(weathercode: number): string {
+  // Маппинг WMO Weather interpretation codes к emoji
+  if (weathercode === 0) {
+    // Clear sky - ясно
+    return "☀️";
+  } else if (weathercode === 1) {
+    // Mainly clear - преимущественно ясно
+    return "🌤️";
+  } else if (weathercode === 2) {
+    // Partly cloudy - переменная облачность
+    return "⛅";
+  } else if (weathercode === 3) {
+    // Overcast - пасмурно
+    return "☁️";
+  } else if (weathercode >= 45 && weathercode <= 48) {
+    // Fog - туман
+    return "🌫️";
+  } else if (weathercode >= 51 && weathercode <= 55) {
+    // Drizzle - морось
+    return "🌦️";
+  } else if (weathercode >= 56 && weathercode <= 57) {
+    // Freezing drizzle - ледяная морось
+    return "🌨️";
+  } else if (weathercode >= 61 && weathercode <= 65) {
+    // Rain - дождь
+    return "🌧️";
+  } else if (weathercode >= 66 && weathercode <= 67) {
+    // Freezing rain - ледяной дождь
+    return "🌨️";
+  } else if (weathercode >= 71 && weathercode <= 77) {
+    // Snow - снег
+    return "❄️";
+  } else if (weathercode >= 80 && weathercode <= 82) {
+    // Rain showers - ливень
+    return "🌦️";
+  } else if (weathercode >= 85 && weathercode <= 86) {
+    // Snow showers - снегопад
+    return "🌨️";
+  } else if (weathercode >= 95 && weathercode <= 99) {
+    // Thunderstorm - гроза
+    return "⛈️";
+  } else {
+    // Неизвестный код
+    return "❓";
+  }
+}
+
+/**
+ * Создаёт иконку погодных условий на основе weathercode, используя emoji
  */
 function createWeatherIcon(weathercode: number): NativeImage {
-  const size = 22;
+  const size = 32; // Увеличиваем размер для лучшей видимости emoji
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
   // Прозрачный фон (не рисуем фон, canvas по умолчанию прозрачный)
-  ctx.fillStyle = "#FFFFFF";
-  ctx.strokeStyle = "#FFFFFF";
-  ctx.lineWidth = 1.5;
-
-  // Рисуем иконку в зависимости от weathercode
-  if (weathercode === 0) {
-    // Ясно - солнце
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const radius = 6;
-    // Круг солнца
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.fill();
-    // Лучи солнца
-    const rayLength = 3;
-    for (let i = 0; i < 8; i++) {
-      const angle = (Math.PI * 2 * i) / 8;
-      const startX = centerX + Math.cos(angle) * (radius + 1);
-      const startY = centerY + Math.sin(angle) * (radius + 1);
-      const endX = centerX + Math.cos(angle) * (radius + rayLength);
-      const endY = centerY + Math.sin(angle) * (radius + rayLength);
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
-    }
-  } else if (weathercode >= 1 && weathercode <= 3) {
-    // Облачно - облака
-    // Первое облако
-    ctx.beginPath();
-    ctx.arc(6, 10, 3, 0, Math.PI * 2);
-    ctx.arc(9, 10, 4, 0, Math.PI * 2);
-    ctx.arc(12, 10, 3, 0, Math.PI * 2);
-    ctx.fill();
-    // Второе облако
-    ctx.beginPath();
-    ctx.arc(10, 13, 2.5, 0, Math.PI * 2);
-    ctx.arc(13, 13, 3.5, 0, Math.PI * 2);
-    ctx.arc(16, 13, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (weathercode >= 45 && weathercode <= 48) {
-    // Туман - горизонтальные линии
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(4, 8 + i * 3);
-      ctx.lineTo(18, 8 + i * 3);
-      ctx.stroke();
-    }
-  } else if (weathercode >= 51 && weathercode <= 67) {
-    // Дождь - капли
-    // Облако
-    ctx.beginPath();
-    ctx.arc(7, 8, 3, 0, Math.PI * 2);
-    ctx.arc(10, 8, 4, 0, Math.PI * 2);
-    ctx.arc(13, 8, 3, 0, Math.PI * 2);
-    ctx.fill();
-    // Капли дождя
-    ctx.beginPath();
-    ctx.moveTo(8, 12);
-    ctx.lineTo(9, 16);
-    ctx.lineTo(7, 16);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(12, 12);
-    ctx.lineTo(13, 16);
-    ctx.lineTo(11, 16);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(15, 12);
-    ctx.lineTo(16, 16);
-    ctx.lineTo(14, 16);
-    ctx.closePath();
-    ctx.fill();
-  } else if (weathercode >= 71 && weathercode <= 77) {
-    // Снег - снежинка
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const length = 5;
-    // Вертикальная и горизонтальная линии
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY - length);
-    ctx.lineTo(centerX, centerY + length);
-    ctx.moveTo(centerX - length, centerY);
-    ctx.lineTo(centerX + length, centerY);
-    ctx.stroke();
-    // Диагональные линии
-    ctx.beginPath();
-    ctx.moveTo(centerX - length * 0.7, centerY - length * 0.7);
-    ctx.lineTo(centerX + length * 0.7, centerY + length * 0.7);
-    ctx.moveTo(centerX - length * 0.7, centerY + length * 0.7);
-    ctx.lineTo(centerX + length * 0.7, centerY - length * 0.7);
-    ctx.stroke();
-  } else if (weathercode >= 80 && weathercode <= 99) {
-    if (weathercode >= 95) {
-      // Гроза - молния
-      // Облако
-      ctx.beginPath();
-      ctx.arc(7, 7, 3, 0, Math.PI * 2);
-      ctx.arc(10, 7, 4, 0, Math.PI * 2);
-      ctx.arc(13, 7, 3, 0, Math.PI * 2);
-      ctx.fill();
-      // Молния
-      ctx.fillStyle = "#FFD700";
-      ctx.beginPath();
-      ctx.moveTo(10, 10);
-      ctx.lineTo(12, 10);
-      ctx.lineTo(11, 13);
-      ctx.lineTo(13, 13);
-      ctx.lineTo(9, 18);
-      ctx.lineTo(11, 15);
-      ctx.lineTo(9, 15);
-      ctx.closePath();
-      ctx.fill();
-    } else if (weathercode >= 85) {
-      // Снегопад - снежинка и снежинки вокруг
-      const centerX = size / 2;
-      const centerY = size / 2;
-      const length = 4;
-      // Центральная снежинка
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY - length);
-      ctx.lineTo(centerX, centerY + length);
-      ctx.moveTo(centerX - length, centerY);
-      ctx.lineTo(centerX + length, centerY);
-      ctx.stroke();
-      // Маленькие снежинки вокруг
-      ctx.beginPath();
-      ctx.arc(5, 5, 1, 0, Math.PI * 2);
-      ctx.arc(17, 8, 1, 0, Math.PI * 2);
-      ctx.arc(6, 17, 1, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Ливень - сильный дождь
-      // Облако
-      ctx.beginPath();
-      ctx.arc(7, 7, 3, 0, Math.PI * 2);
-      ctx.arc(10, 7, 4, 0, Math.PI * 2);
-      ctx.arc(13, 7, 3, 0, Math.PI * 2);
-      ctx.fill();
-      // Много капель
-      ctx.fillStyle = "#87CEEB";
-      for (let i = 0; i < 5; i++) {
-        ctx.beginPath();
-        ctx.moveTo(6 + i * 2.5, 11);
-        ctx.lineTo(7 + i * 2.5, 17);
-        ctx.lineTo(5 + i * 2.5, 17);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  } else {
-    // Неизвестно - вопросительный знак
-    ctx.font = "bold 14px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("?", size / 2, size / 2);
-  }
+  
+  // Получаем emoji для погодных условий
+  const emoji = getWeatherEmoji(weathercode);
+  
+  // Настройки текста для emoji
+  ctx.font = "bold 24px Arial"; // Увеличенный размер шрифта для emoji
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  
+  // Рисуем emoji по центру
+  const textX = size / 2;
+  const textY = size / 2;
+  ctx.fillText(emoji, textX, textY);
 
   const buffer = canvas.toBuffer("image/png");
   return nativeImage.createFromBuffer(buffer);
