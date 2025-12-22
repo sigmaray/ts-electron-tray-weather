@@ -1975,13 +1975,12 @@ async function updateTrayTemperature() {
     timeString = ` (обновлено: ${hours}:${minutes}:${seconds})`;
   }
 
-  // Tooltip при наведении для первой иконки
+  // Tooltip при наведении для обеих иконок (одинаковый текст)
   const locationString = cityName && countryName ? `${cityName}, ${countryName}\n` : "";
-  tray.setToolTip(`${locationString}Температура: ${label}${timeString}`);
-
-  // Устанавливаем tooltip для второй иконки
   const weatherDescription = getWeatherDescription(weathercode);
-  weatherTray.setToolTip(`${locationString}Погода: ${weatherDescription}${timeString}`);
+  const tooltipText = `${locationString}Температура: ${label}\nПогода: ${weatherDescription}${timeString}`;
+  tray.setToolTip(tooltipText);
+  weatherTray.setToolTip(tooltipText);
 
   // Попытка отобразить текст прямо в трее (полноценно работает в macOS).
   try {
