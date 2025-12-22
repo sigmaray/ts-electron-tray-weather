@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell, ipcMain } from "electron";
+import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell, ipcMain, Notification } from "electron";
 import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -606,9 +606,35 @@ function showSettings(): void {
           background: #1976d2;
           color: #fff;
         }
+        .toast {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: #4caf50;
+          color: #fff;
+          padding: 16px 24px;
+          border-radius: 4px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          font-size: 14px;
+          font-weight: 500;
+          z-index: 10000;
+          opacity: 0;
+          transform: translateY(-20px);
+          transition: opacity 0.3s ease, transform 0.3s ease;
+          pointer-events: none;
+        }
+        .toast.show {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .toast.hide {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
       </style>
     </head>
     <body>
+      <div id="toast" class="toast"></div>
       <div class="container">
         <h1>⚙️ Настройки</h1>
         
@@ -809,10 +835,25 @@ function showSettings(): void {
           });
         });
 
+        // Функция для показа toast-уведомления
+        function showToast(message, duration = 3000) {
+          const toast = document.getElementById('toast');
+          toast.textContent = message;
+          toast.classList.remove('hide');
+          toast.classList.add('show');
+          
+          setTimeout(() => {
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            setTimeout(() => {
+              window.close();
+            }, 300); // Закрываем окно после анимации исчезновения
+          }, duration);
+        }
+
         // Обработка ответов от главного процесса
-        ipcRenderer.on('settings-saved', () => {
-          window.close();
-        });
+        // Окно закрывается автоматически после успешного сохранения,
+        // уведомление показывается через системное уведомление
 
         ipcRenderer.on('settings-error', (event, errors) => {
           showValidationErrors(errors);
@@ -858,17 +899,21 @@ function showSettings(): void {
     const success = await applySettings(newSettings as Settings);
     
     if (success) {
-      event.sender.send('settings-saved');
       // Удаляем обработчик после успешного сохранения
       ipcMain.removeListener('save-settings', handler);
-      dialog.showMessageBox(settingsWindow, {
-        type: 'info',
-        title: 'Настройки сохранены',
-        message: 'Настройки успешно сохранены и применены.',
-        buttons: ['OK'],
-      }).then(() => {
-        settingsWindow.close();
-      });
+      // Закрываем окно настроек
+      settingsWindow.close();
+      // Показываем системное уведомление после закрытия окна
+      setTimeout(() => {
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title: 'Настройки сохранены',
+            body: 'Настройки успешно сохранены и применены.',
+            silent: false,
+          });
+          notification.show();
+        }
+      }, 100); // Небольшая задержка для корректного закрытия окна
     } else {
       // При ошибке показываем сообщение, но не закрываем окно настроек
       // чтобы пользователь мог исправить данные
