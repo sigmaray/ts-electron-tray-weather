@@ -1671,7 +1671,7 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
  */
 function createTemperatureIcon(text: string): NativeImage {
   // Увеличиваем размер для лучшего качества и видимости текста
-  const size = isWindows ? 16 : 32; // Увеличил размер canvas
+  const size = 32; // Увеличил размер canvas
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
@@ -1881,7 +1881,7 @@ async function initializeEmojiCache(): Promise<void> {
  * Создаёт иконку погодных условий на основе weathercode, используя цветные emoji
  */
 function createWeatherIcon(weathercode: number): NativeImage {
-  const targetSize = isWindows ? 16 : 32;
+  const targetSize = 32;
   
   // Проверяем кэш цветных emoji только на Linux
   if (isLinux && emojiIconCache.has(weathercode)) {
