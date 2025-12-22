@@ -1614,10 +1614,7 @@ function createWeatherIcon(weathercode: number): NativeImage {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
-  // Фон
-  ctx.fillStyle = "#4a90e2";
-  ctx.fillRect(0, 0, size, size);
-
+  // Прозрачный фон (не рисуем фон, canvas по умолчанию прозрачный)
   ctx.fillStyle = "#FFFFFF";
   ctx.strokeStyle = "#FFFFFF";
   ctx.lineWidth = 1.5;
