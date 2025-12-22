@@ -573,6 +573,39 @@ function showSettings(): void {
         .info-box li {
           margin-bottom: 4px;
         }
+        .quick-links {
+          background: #f5f5f5;
+          border: 1px solid #e0e0e0;
+          border-radius: 4px;
+          padding: 12px;
+          margin-bottom: 20px;
+        }
+        .quick-links h3 {
+          font-size: 13px;
+          font-weight: 600;
+          color: #424242;
+          margin-bottom: 8px;
+        }
+        .quick-links-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .quick-link {
+          color: #1976d2;
+          text-decoration: none;
+          padding: 6px 12px;
+          border: 1px solid #1976d2;
+          border-radius: 4px;
+          font-size: 13px;
+          transition: all 0.2s;
+          cursor: pointer;
+          display: inline-block;
+        }
+        .quick-link:hover {
+          background: #1976d2;
+          color: #fff;
+        }
       </style>
     </head>
     <body>
@@ -613,6 +646,17 @@ function showSettings(): void {
             </label>
             <input type="text" id="country" placeholder="Введите название страны">
             <div class="error-message" id="countryError"></div>
+          </div>
+
+          <div class="quick-links">
+            <h3>📍 Быстрый выбор города:</h3>
+            <div class="quick-links-list">
+              <a href="#" class="quick-link" data-city="Warsaw" data-country="Poland">Warsaw / Poland</a>
+              <a href="#" class="quick-link" data-city="Minsk" data-country="Belarus">Minsk / Belarus</a>
+              <a href="#" class="quick-link" data-city="Astana" data-country="Kazakhstan">Astana / Kazakhstan</a>
+              <a href="#" class="quick-link" data-city="Berlin" data-country="Germany">Berlin / Germany</a>
+              <a href="#" class="quick-link" data-city="Paris" data-country="France">Paris / France</a>
+            </div>
           </div>
 
           <div class="form-group">
@@ -745,6 +789,24 @@ function showSettings(): void {
 
         document.getElementById('cancelBtn').addEventListener('click', () => {
           window.close();
+        });
+
+        // Обработка быстрых ссылок на города
+        document.querySelectorAll('.quick-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const city = link.getAttribute('data-city');
+            const country = link.getAttribute('data-country');
+            if (city && country) {
+              document.getElementById('city').value = city;
+              document.getElementById('country').value = country;
+              // Очищаем координаты при выборе города
+              document.getElementById('latitude').value = '';
+              document.getElementById('longitude').value = '';
+              // Очищаем ошибки
+              clearErrors();
+            }
+          });
         });
 
         // Обработка ответов от главного процесса
