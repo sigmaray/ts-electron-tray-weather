@@ -1558,7 +1558,8 @@ function createTemperatureIcon(text: string): NativeImage {
 
   // Настройки текста
   ctx.fillStyle = textColor;
-  ctx.font = `bold ${isWindows ? 12 : 24}px Arial`; // Увеличил размер шрифта пропорционально размеру canvas
+  const fontSize = size * 0.75;
+  ctx.font = `bold ${fontSize}px Arial`; // Увеличил размер шрифта пропорционально размеру canvas
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
@@ -1667,13 +1668,15 @@ let emojiCacheInitialized = false;
 async function initializeEmojiCache(): Promise<void> {
   if (emojiCacheInitialized) return;
   
-  const size = 32;
+  // Используем больший размер для лучшего качества, затем масштабируем
+  const renderSize = 64; // Большой размер для качественного рендеринга
+  const targetSize = isWindows ? 16 : 32; // Финальный размер иконки
   const weatherCodes = [0, 1, 2, 3, 45, 51, 56, 61, 66, 71, 80, 85, 95];
   
   // Создаём временное скрытое окно для рендеринга цветных emoji
   const tempWindow = new BrowserWindow({
-    width: size,
-    height: size,
+    width: renderSize,
+    height: renderSize,
     show: false,
     transparent: true,
     frame: false,
@@ -1696,13 +1699,13 @@ async function initializeEmojiCache(): Promise<void> {
           body {
             margin: 0;
             padding: 0;
-            width: ${size}px;
-            height: ${size}px;
+            width: ${renderSize}px;
+            height: ${renderSize}px;
             display: flex;
             align-items: center;
             justify-content: center;
             background: transparent;
-            font-size: 24px;
+            font-size: ${renderSize * 0.75}px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
           }
         </style>
@@ -1716,12 +1719,18 @@ async function initializeEmojiCache(): Promise<void> {
       tempWindow.webContents.once("did-finish-load", () => {
         setTimeout(() => {
           tempWindow.capturePage().then((image) => {
-            emojiIconCache.set(code, image);
+            // Масштабируем изображение до нужного размера для лучшего качества
+            const scaledImage = image.resize({
+              width: targetSize,
+              height: targetSize,
+              quality: 'best'
+            });
+            emojiIconCache.set(code, scaledImage);
             resolve();
           }).catch(() => {
             resolve(); // Пропускаем если не удалось
           });
-        }, 50);
+        }, 100); // Увеличиваем задержку для Windows
       });
     });
   }
@@ -1734,16 +1743,27 @@ async function initializeEmojiCache(): Promise<void> {
  * Создаёт иконку погодных условий на основе weathercode, используя цветные emoji
  */
 function createWeatherIcon(weathercode: number): NativeImage {
-  const emoji = getWeatherEmoji(weathercode);
-  const size = isWindows ? 16 : 32;
+  const targetSize = isWindows ? 16 : 32;
   
   // Проверяем кэш цветных emoji
   if (emojiIconCache.has(weathercode)) {
-    return emojiIconCache.get(weathercode)!;
+    const cachedImage = emojiIconCache.get(weathercode)!;
+    // Убеждаемся, что размер правильный
+    const size = cachedImage.getSize();
+    if (size.width === targetSize && size.height === targetSize) {
+      return cachedImage;
+    }
+    // Масштабируем если размер не совпадает
+    return cachedImage.resize({
+      width: targetSize,
+      height: targetSize,
+      quality: 'best'
+    });
   }
   
-  // Fallback: используем canvas (emoji будут серыми, но это лучше чем ничего)
-  const canvas = createCanvas(size, size);
+  // Fallback: используем canvas с увеличенным размером для лучшего качества на Windows
+  const renderSize = isWindows ? 32 : targetSize; // Рендерим в большем размере для Windows
+  const canvas = createCanvas(renderSize, renderSize);
   const ctx = canvas.getContext("2d");
   
   // Пробуем использовать системные шрифты с поддержкой emoji
@@ -1757,15 +1777,28 @@ function createWeatherIcon(weathercode: number): NativeImage {
     fontFamily = "Noto Color Emoji";
   }
   
-  ctx.font = `bold ${isWindows ? 12 : 24}px ${fontFamily}`;
+  // Используем больший размер шрифта для лучшего качества
+  const fontSize = renderSize * 0.75;
+  ctx.font = `bold ${fontSize}px ${fontFamily}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
+  const emoji = getWeatherEmoji(weathercode);
+  
   // Рисуем emoji по центру
-  ctx.fillText(emoji, size / 2, size / 2);
+  ctx.fillText(emoji, renderSize / 2, renderSize / 2);
 
   const buffer = canvas.toBuffer("image/png");
-  const image = nativeImage.createFromBuffer(buffer);
+  let image = nativeImage.createFromBuffer(buffer);
+  
+  // Масштабируем до нужного размера для Windows
+  if (isWindows && renderSize !== targetSize) {
+    image = image.resize({
+      width: targetSize,
+      height: targetSize,
+      quality: 'best'
+    });
+  }
   
   return image;
 }
