@@ -3,6 +3,11 @@ import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+
+const isMac = os.platform() === "darwin";
+const isWindows = os.platform() === "win32";
+const isLinux = os.platform() === "linux";
+
 // Интерфейс для настроек
 interface Settings {
   city?: string;
@@ -1535,7 +1540,7 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
  */
 function createTemperatureIcon(text: string): NativeImage {
   // Увеличиваем размер для лучшего качества и видимости текста
-  const size = 22; // Увеличил размер canvas
+  const size = isWindows ? 16 : 32; // Увеличил размер canvas
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
@@ -1553,7 +1558,7 @@ function createTemperatureIcon(text: string): NativeImage {
 
   // Настройки текста
   ctx.fillStyle = textColor;
-  ctx.font = "bold 12px Arial"; // Увеличил размер шрифта пропорционально размеру canvas
+  ctx.font = `bold ${isWindows ? 12 : 24}px Arial`; // Увеличил размер шрифта пропорционально размеру canvas
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
@@ -1730,7 +1735,7 @@ async function initializeEmojiCache(): Promise<void> {
  */
 function createWeatherIcon(weathercode: number): NativeImage {
   const emoji = getWeatherEmoji(weathercode);
-  const size = 32;
+  const size = isWindows ? 16 : 32;
   
   // Проверяем кэш цветных emoji
   if (emojiIconCache.has(weathercode)) {
@@ -1752,7 +1757,7 @@ function createWeatherIcon(weathercode: number): NativeImage {
     fontFamily = "Noto Color Emoji";
   }
   
-  ctx.font = `bold 24px ${fontFamily}`;
+  ctx.font = `bold ${isWindows ? 12 : 24}px ${fontFamily}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
