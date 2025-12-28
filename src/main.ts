@@ -411,13 +411,26 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
     ...newSettings,
   };
 
-  const hasCoordinates = mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined &&
-                         mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined;
-  const hasCityCountry = mergedForValidation.city && mergedForValidation.country && 
-                         mergedForValidation.city.trim() !== "" && mergedForValidation.country.trim() !== "";
+  // Проверяем наличие координат (хотя бы одна заполнена)
+  const hasAnyCoordinate = (mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined) ||
+                           (mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined);
+  const hasBothCoordinates = mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined &&
+                             mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined;
+  
+  // Проверяем наличие города/страны (хотя бы одно заполнено)
+  const hasAnyCityCountry = (mergedForValidation.city && mergedForValidation.city.trim() !== "") ||
+                            (mergedForValidation.country && mergedForValidation.country.trim() !== "");
+  const hasBothCityCountry = mergedForValidation.city && mergedForValidation.city.trim() !== "" &&
+                             mergedForValidation.country && mergedForValidation.country.trim() !== "";
 
-  if (!hasCoordinates && !hasCityCountry) {
-    errors.push("Необходимо указать либо координаты (широта и долгота), либо город и страну");
+  // Проверяем, что не заполнены одновременно оба варианта (даже частично)
+  if (hasAnyCoordinate && hasAnyCityCountry) {
+    errors.push("Нельзя указывать одновременно и город/страну, и координаты. Выберите один вариант.");
+  }
+
+  // Проверяем, что заполнено хотя бы одно полностью
+  if (!hasBothCoordinates && !hasBothCityCountry) {
+    errors.push("Необходимо указать либо обе координаты (широта и долгота), либо город и страну");
   }
 
   return {
@@ -775,6 +788,18 @@ function showSettings(): void {
         document.getElementById('longitude').value = currentSettings.longitude !== null && currentSettings.longitude !== undefined ? currentSettings.longitude : '';
         document.getElementById('updateInterval').value = currentSettings.updateIntervalInSeconds || 60;
 
+        // Проверяем при загрузке: если заполнены оба варианта, очищаем координаты (приоритет у города/страны)
+        const hasCityCountry = (currentSettings.city && currentSettings.city.trim() !== '') &&
+                               (currentSettings.country && currentSettings.country.trim() !== '');
+        const hasAnyCoordinate = (currentSettings.latitude !== null && currentSettings.latitude !== undefined) ||
+                                (currentSettings.longitude !== null && currentSettings.longitude !== undefined);
+        
+        if (hasCityCountry && hasAnyCoordinate) {
+          // Очищаем координаты, если заполнены город и страна
+          document.getElementById('latitude').value = '';
+          document.getElementById('longitude').value = '';
+        }
+
         function clearErrors() {
           document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
           document.querySelectorAll('input').forEach(el => el.classList.remove('error'));
@@ -839,12 +864,28 @@ function showSettings(): void {
             showFieldError('longitude', 'Долгота должна быть от -180 до 180');
           }
 
-          const hasCoordinates = newSettings.latitude !== null && newSettings.longitude !== null;
-          const hasCityCountry = newSettings.city && newSettings.country;
+          // Проверяем наличие координат (хотя бы одна заполнена)
+          const hasAnyCoordinate = (newSettings.latitude !== null && newSettings.latitude !== undefined) ||
+                                   (newSettings.longitude !== null && newSettings.longitude !== undefined);
+          const hasBothCoordinates = newSettings.latitude !== null && newSettings.latitude !== undefined &&
+                                     newSettings.longitude !== null && newSettings.longitude !== undefined;
+          
+          // Проверяем наличие города/страны (хотя бы одно заполнено)
+          const hasAnyCityCountry = (newSettings.city && newSettings.city.trim() !== '') ||
+                                    (newSettings.country && newSettings.country.trim() !== '');
+          const hasBothCityCountry = newSettings.city && newSettings.city.trim() !== '' &&
+                                     newSettings.country && newSettings.country.trim() !== '';
 
-          if (!hasCoordinates && !hasCityCountry) {
+          // Проверяем, что не заполнены одновременно оба варианта (даже частично)
+          if (hasAnyCoordinate && hasAnyCityCountry) {
             validation.valid = false;
-            validation.errors.push('Необходимо указать либо координаты, либо город и страну');
+            validation.errors.push('Нельзя указывать одновременно и город/страну, и координаты. Выберите один вариант.');
+          }
+
+          // Проверяем, что заполнено хотя бы одно полностью
+          if (!hasBothCoordinates && !hasBothCityCountry) {
+            validation.valid = false;
+            validation.errors.push('Необходимо указать либо обе координаты (широта и долгота), либо город и страну');
           }
 
           if (!validation.valid) {
@@ -860,6 +901,72 @@ function showSettings(): void {
           window.close();
         });
 
+        // Логика взаимного исключения: при заполнении города/страны очищаем координаты
+        const cityInput = document.getElementById('city');
+        const countryInput = document.getElementById('country');
+        const latitudeInput = document.getElementById('latitude');
+        const longitudeInput = document.getElementById('longitude');
+
+        function clearCoordinates() {
+          latitudeInput.value = '';
+          longitudeInput.value = '';
+        }
+
+        function clearCityCountry() {
+          cityInput.value = '';
+          countryInput.value = '';
+        }
+
+        // При вводе в поля города или страны - очищаем координаты
+        cityInput.addEventListener('input', () => {
+          if (cityInput.value.trim() !== '') {
+            clearCoordinates();
+          }
+        });
+
+        cityInput.addEventListener('change', () => {
+          if (cityInput.value.trim() !== '') {
+            clearCoordinates();
+          }
+        });
+
+        countryInput.addEventListener('input', () => {
+          if (countryInput.value.trim() !== '') {
+            clearCoordinates();
+          }
+        });
+
+        countryInput.addEventListener('change', () => {
+          if (countryInput.value.trim() !== '') {
+            clearCoordinates();
+          }
+        });
+
+        // При вводе в поля координат - очищаем город и страну
+        latitudeInput.addEventListener('input', () => {
+          if (latitudeInput.value.trim() !== '') {
+            clearCityCountry();
+          }
+        });
+
+        latitudeInput.addEventListener('change', () => {
+          if (latitudeInput.value.trim() !== '') {
+            clearCityCountry();
+          }
+        });
+
+        longitudeInput.addEventListener('input', () => {
+          if (longitudeInput.value.trim() !== '') {
+            clearCityCountry();
+          }
+        });
+
+        longitudeInput.addEventListener('change', () => {
+          if (longitudeInput.value.trim() !== '') {
+            clearCityCountry();
+          }
+        });
+
         // Обработка быстрых ссылок на города
         document.querySelectorAll('.quick-link').forEach(link => {
           link.addEventListener('click', (e) => {
@@ -870,8 +977,7 @@ function showSettings(): void {
               document.getElementById('city').value = city;
               document.getElementById('country').value = country;
               // Очищаем координаты при выборе города
-              document.getElementById('latitude').value = '';
-              document.getElementById('longitude').value = '';
+              clearCoordinates();
               // Очищаем ошибки
               clearErrors();
             }
