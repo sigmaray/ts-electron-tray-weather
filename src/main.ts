@@ -682,6 +682,7 @@ function showSettings(): void {
               <a href="#" class="quick-link" data-city="Astana" data-country="Kazakhstan">Astana / Kazakhstan</a>
               <a href="#" class="quick-link" data-city="Berlin" data-country="Germany">Berlin / Germany</a>
               <a href="#" class="quick-link" data-city="Paris" data-country="France">Paris / France</a>
+              <a href="#" class="quick-link" data-city="New York" data-country="United States">New York / United States</a>
             </div>
           </div>
 
