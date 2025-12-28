@@ -1224,6 +1224,281 @@ function showHelp(): void {
 }
 
 /**
+ * Показывает окно с подробной информацией о погоде и прогнозом
+ */
+async function showWeatherDetails(): Promise<void> {
+  const weatherData = await fetchExtendedWeatherData();
+  
+  if (!weatherData) {
+    dialog.showMessageBox({
+      type: "error",
+      title: "Ошибка",
+      message: "Не удалось загрузить данные о погоде",
+      detail: "Попробуйте обновить данные позже.",
+    });
+    return;
+  }
+
+  const locationString = cityName && countryName ? `${cityName}, ${countryName}` : 
+                        (LATITUDE !== null && LONGITUDE !== null ? `${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}` : "Неизвестно");
+  
+  const currentTime = new Date(weatherData.current.time);
+  const timeStr = currentTime.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // Форматируем прогноз
+  const forecastHtml = weatherData.daily.map((day, index) => {
+    const date = new Date(day.date);
+    const dayName = index === 0 ? "Сегодня" : 
+                   index === 1 ? "Завтра" :
+                   date.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+    const emoji = getWeatherEmoji(day.weathercode);
+    const description = getWeatherDescription(day.weathercode);
+    
+    return `
+      <div class="forecast-day">
+        <div class="forecast-day-header">
+          <span class="forecast-day-name">${dayName}</span>
+          <span class="forecast-emoji">${emoji}</span>
+        </div>
+        <div class="forecast-day-info">
+          <div class="forecast-description">${description}</div>
+          <div class="forecast-temp">
+            <span class="temp-max">${Math.round(day.temperature_max)}°</span>
+            <span class="temp-min">${Math.round(day.temperature_min)}°</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Подробная информация о погоде</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-size: 14px;
+          line-height: 1.6;
+          color: #333;
+          background: #f5f5f5;
+          padding: 20px;
+        }
+        .container {
+          max-width: 800px;
+          margin: 0 auto;
+          background: #fff;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          padding: 24px;
+        }
+        .header {
+          margin-bottom: 24px;
+          padding-bottom: 16px;
+          border-bottom: 2px solid #e0e0e0;
+        }
+        .header h1 {
+          font-size: 24px;
+          font-weight: 600;
+          color: #1976d2;
+          margin-bottom: 8px;
+        }
+        .header .location {
+          color: #666;
+          font-size: 16px;
+        }
+        .current-weather {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #fff;
+          padding: 24px;
+          border-radius: 8px;
+          margin-bottom: 24px;
+        }
+        .current-weather-content {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .current-temp {
+          font-size: 64px;
+          font-weight: 300;
+          line-height: 1;
+        }
+        .current-info {
+          text-align: right;
+        }
+        .current-emoji {
+          font-size: 64px;
+          line-height: 1;
+        }
+        .current-description {
+          font-size: 18px;
+          margin-top: 8px;
+          opacity: 0.9;
+        }
+        .current-details {
+          margin-top: 16px;
+          padding-top: 16px;
+          border-top: 1px solid rgba(255,255,255,0.3);
+          display: flex;
+          gap: 24px;
+          font-size: 14px;
+        }
+        .current-detail-item {
+          display: flex;
+          flex-direction: column;
+        }
+        .current-detail-label {
+          opacity: 0.8;
+          font-size: 12px;
+          margin-bottom: 4px;
+        }
+        .current-detail-value {
+          font-weight: 600;
+        }
+        .forecast-section {
+          margin-top: 24px;
+        }
+        .forecast-section h2 {
+          font-size: 20px;
+          font-weight: 600;
+          color: #1976d2;
+          margin-bottom: 16px;
+        }
+        .forecast-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .forecast-day {
+          background: #f9f9f9;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          padding: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .forecast-day-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .forecast-day-name {
+          font-weight: 600;
+          font-size: 16px;
+          color: #333;
+        }
+        .forecast-emoji {
+          font-size: 32px;
+        }
+        .forecast-day-info {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+        .forecast-description {
+          color: #666;
+          font-size: 14px;
+        }
+        .forecast-temp {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .temp-max {
+          font-size: 20px;
+          font-weight: 600;
+          color: #333;
+        }
+        .temp-min {
+          font-size: 18px;
+          color: #999;
+        }
+        .update-time {
+          margin-top: 16px;
+          padding-top: 16px;
+          border-top: 1px solid #e0e0e0;
+          color: #666;
+          font-size: 12px;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🌡️ Подробная информация о погоде</h1>
+          <div class="location">📍 ${locationString}</div>
+        </div>
+        
+        <div class="current-weather">
+          <div class="current-weather-content">
+            <div>
+              <div class="current-temp">${Math.round(weatherData.current.temperature)}°</div>
+              <div class="current-description">${getWeatherDescription(weatherData.current.weathercode)}</div>
+            </div>
+            <div class="current-emoji">${getWeatherEmoji(weatherData.current.weathercode)}</div>
+          </div>
+          <div class="current-details">
+            <div class="current-detail-item">
+              <div class="current-detail-label">Скорость ветра</div>
+              <div class="current-detail-value">${Math.round(weatherData.current.windspeed)} км/ч</div>
+            </div>
+            <div class="current-detail-item">
+              <div class="current-detail-label">Направление ветра</div>
+              <div class="current-detail-value">${Math.round(weatherData.current.winddirection)}°</div>
+            </div>
+            <div class="current-detail-item">
+              <div class="current-detail-label">Время обновления</div>
+              <div class="current-detail-value">${timeStr}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="forecast-section">
+          <h2>📅 Прогноз на 7 дней</h2>
+          <div class="forecast-list">
+            ${forecastHtml}
+          </div>
+        </div>
+        
+        <div class="update-time">
+          Данные обновлены: ${timeStr}
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const weatherWindow = new BrowserWindow({
+    width: 700,
+    height: 800,
+    title: "Подробная информация о погоде — Tray Weather",
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+    resizable: true,
+  });
+
+  weatherWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
+/**
  * Показывает окно с последними ошибками API (с прокруткой и кликабельными ссылками)
  */
 function showApiErrors(): void {
@@ -1628,6 +1903,22 @@ interface WeatherData {
   weathercode: number;
 }
 
+interface ExtendedWeatherData {
+  current: {
+    temperature: number;
+    weathercode: number;
+    windspeed: number;
+    winddirection: number;
+    time: string;
+  };
+  daily: Array<{
+    date: string;
+    temperature_max: number;
+    temperature_min: number;
+    weathercode: number;
+  }>;
+}
+
 async function fetchWeatherData(): Promise<WeatherData | null> {
   if (!WEATHER_URL) {
     const error = new Error("WEATHER_URL не инициализирован");
@@ -1662,6 +1953,58 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     const errorCode = (err as any)?.code;
     addApiError("Weather API", error, WEATHER_URL, errorCode ? { errorCode } : undefined);
     console.error("Failed to fetch weather:", err);
+    return null;
+  }
+}
+
+/**
+ * Получает расширенные данные о погоде с прогнозом
+ */
+async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
+  if (LATITUDE === null || LONGITUDE === null) {
+    return null;
+  }
+  
+  // URL для получения расширенных данных с прогнозом на 7 дней
+  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=7`;
+  
+  try {
+    const res = await fetch(extendedUrl);
+    if (!res.ok) {
+      const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
+      addApiError("Weather API (расширенные данные)", error, extendedUrl, { statusCode: res.status });
+      return null;
+    }
+    const data: any = await res.json();
+    
+    if (data && data.current_weather && data.daily) {
+      const dailyForecast = [];
+      for (let i = 0; i < Math.min(7, data.daily.time.length); i++) {
+        dailyForecast.push({
+          date: data.daily.time[i],
+          temperature_max: data.daily.temperature_2m_max[i],
+          temperature_min: data.daily.temperature_2m_min[i],
+          weathercode: data.daily.weathercode[i],
+        });
+      }
+      
+      return {
+        current: {
+          temperature: data.current_weather.temperature,
+          weathercode: data.current_weather.weathercode || 0,
+          windspeed: data.current_weather.windspeed || 0,
+          winddirection: data.current_weather.winddirection || 0,
+          time: data.current_weather.time || new Date().toISOString(),
+        },
+        daily: dailyForecast,
+      };
+    }
+    return null;
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    const errorCode = (err as any)?.code;
+    addApiError("Weather API (расширенные данные)", error, extendedUrl, errorCode ? { errorCode } : undefined);
+    console.error("Failed to fetch extended weather:", err);
     return null;
   }
 }
@@ -2061,6 +2404,13 @@ async function updateTrayTemperature() {
   });
   menuItems.push({ type: "separator" });
   menuItems.push({
+    label: "Подробная информация о погоде",
+    click: () => {
+      void showWeatherDetails();
+    },
+  });
+  menuItems.push({ type: "separator" });
+  menuItems.push({
     label: "Настройки",
     click: () => {
       showSettings();
@@ -2147,6 +2497,13 @@ async function updateTrayTemperature() {
   });
   weatherMenuItems.push({ type: "separator" });
   weatherMenuItems.push({
+    label: "Подробная информация о погоде",
+    click: () => {
+      void showWeatherDetails();
+    },
+  });
+  weatherMenuItems.push({ type: "separator" });
+  weatherMenuItems.push({
     label: "Настройки",
     click: () => {
       showSettings();
@@ -2190,10 +2547,20 @@ async function createTray() {
   // Создаём первую иконку (температура)
   const baseIcon = createBaseIcon();
   tray = new Tray(baseIcon);
+  
+  // Обработчик клика левой кнопкой мыши для первой иконки
+  tray.on('click', () => {
+    void showWeatherDetails();
+  });
 
   // Создаём вторую иконку (погодные условия)
   const baseWeatherIcon = createWeatherIcon(0); // Начальная иконка - ясно
   weatherTray = new Tray(baseWeatherIcon);
+  
+  // Обработчик клика левой кнопкой мыши для второй иконки
+  weatherTray.on('click', () => {
+    void showWeatherDetails();
+  });
 
   void updateTrayTemperature();
 
