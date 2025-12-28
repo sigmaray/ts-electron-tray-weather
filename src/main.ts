@@ -115,6 +115,22 @@ interface ApiError {
 const apiErrors: ApiError[] = [];
 const MAX_ERRORS = 20;
 
+// Массив для хранения последних 20 API-запросов
+interface ApiRequest {
+  timestamp: Date;
+  api: string; // Название API (weather, geocoding, etc.)
+  url: string; // URL запроса
+  method: string; // HTTP метод (GET, POST, etc.)
+  requestHeaders?: Record<string, string>; // Заголовки запроса
+  responseStatus?: number; // HTTP статус код ответа
+  responseHeaders?: Record<string, string>; // Заголовки ответа
+  responseBody?: string; // Тело ответа (JSON строка)
+  duration?: number; // Длительность запроса в мс
+}
+
+const apiRequests: ApiRequest[] = [];
+const MAX_REQUESTS = 20;
+
 /**
  * Извлекает детальную информацию из ошибки
  */
@@ -195,6 +211,32 @@ function addApiError(api: string, error: string | Error, url?: string, additiona
   ].filter(Boolean).join(', ');
   
   console.error(`[${api}] Ошибка добавлена в историю:`, errorInfo);
+}
+
+/**
+ * Добавляет запрос в историю последних запросов
+ */
+function addApiRequest(api: string, url: string, method: string, requestHeaders?: Record<string, string>, responseStatus?: number, responseHeaders?: Record<string, string>, responseBody?: string, duration?: number): void {
+  const apiRequest: ApiRequest = {
+    timestamp: new Date(),
+    api,
+    url,
+    method,
+    requestHeaders,
+    responseStatus,
+    responseHeaders,
+    responseBody,
+    duration,
+  };
+  
+  apiRequests.push(apiRequest);
+  
+  // Ограничиваем количество запросов до MAX_REQUESTS
+  if (apiRequests.length > MAX_REQUESTS) {
+    apiRequests.shift(); // Удаляем самый старый запрос
+  }
+  
+  console.log(`[${api}] Запрос добавлен в историю: ${method} ${url} (${responseStatus || 'N/A'})`);
 }
 
 /**
@@ -1719,6 +1761,278 @@ async function showWeatherDetails(): Promise<void> {
 }
 
 /**
+ * Показывает окно с последними API-запросами
+ */
+function showApiRequests(): void {
+  if (apiRequests.length === 0) {
+    dialog.showMessageBox({
+      type: "info",
+      title: "История API-запросов",
+      message: "Запросов не было",
+      detail: "История запросов пуста.",
+    });
+    return;
+  }
+
+  // Форматируем запросы для HTML-отображения
+  const requestsHtml = apiRequests
+    .slice()
+    .reverse() // Показываем последние запросы первыми
+    .map((req, index) => {
+      const timeStr = req.timestamp.toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      
+      const escapedUrl = escapeHtml(req.url);
+      const escapedApi = escapeHtml(req.api);
+      
+      let requestHeadersHtml = "";
+      if (req.requestHeaders && Object.keys(req.requestHeaders).length > 0) {
+        const headersStr = Object.entries(req.requestHeaders)
+          .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`)
+          .join("\n");
+        requestHeadersHtml = `<div class="request-section">
+          <div class="request-section-title">Заголовки запроса:</div>
+          <pre class="request-pre">${headersStr}</pre>
+        </div>`;
+      } else {
+        requestHeadersHtml = `<div class="request-section">
+          <div class="request-section-title">Заголовки запроса:</div>
+          <pre class="request-pre">(нет заголовков)</pre>
+        </div>`;
+      }
+      
+      let responseStatusHtml = "";
+      if (req.responseStatus) {
+        const statusText = req.responseStatus === 200 ? "OK" :
+                          req.responseStatus === 404 ? "Not Found" :
+                          req.responseStatus === 403 ? "Forbidden" :
+                          req.responseStatus === 500 ? "Internal Server Error" :
+                          req.responseStatus === 503 ? "Service Unavailable" :
+                          req.responseStatus === 429 ? "Too Many Requests" :
+                          "Unknown";
+        responseStatusHtml = `<div class="request-section">
+          <div class="request-section-title">HTTP статус:</div>
+          <div class="status-code status-${req.responseStatus}">${req.responseStatus} ${statusText}</div>
+        </div>`;
+      }
+      
+      let responseHeadersHtml = "";
+      if (req.responseHeaders && Object.keys(req.responseHeaders).length > 0) {
+        const headersStr = Object.entries(req.responseHeaders)
+          .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`)
+          .join("\n");
+        responseHeadersHtml = `<div class="request-section">
+          <div class="request-section-title">Заголовки ответа:</div>
+          <pre class="request-pre">${headersStr}</pre>
+        </div>`;
+      }
+      
+      let responseBodyHtml = "";
+      if (req.responseBody) {
+        const bodyStr = escapeHtml(req.responseBody);
+        responseBodyHtml = `<div class="request-section">
+          <div class="request-section-title">Тело ответа:</div>
+          <pre class="request-pre response-body">${bodyStr}</pre>
+        </div>`;
+      }
+      
+      const durationStr = req.duration !== undefined ? ` (${req.duration} мс)` : "";
+      
+      return `
+        <div class="request-item">
+          <div class="request-number">${apiRequests.length - index}.</div>
+          <div class="request-content">
+            <div class="request-time">[${timeStr}]${durationStr}</div>
+            <div class="request-api"><strong>${escapedApi}</strong></div>
+            <div class="request-url"><strong>URL:</strong> <a href="${escapedUrl}" class="url-link">${escapedUrl}</a></div>
+            <div class="request-method"><strong>Метод:</strong> ${escapeHtml(req.method)}</div>
+            ${requestHeadersHtml}
+            ${responseStatusHtml}
+            ${responseHeadersHtml}
+            ${responseBodyHtml}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>История API-запросов (${apiRequests.length} из ${MAX_REQUESTS})</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-size: 13px;
+          line-height: 1.5;
+          color: #333;
+          background: #fff;
+          padding: 16px;
+        }
+        .header {
+          margin-bottom: 16px;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #e0e0e0;
+        }
+        .header h1 {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1976d2;
+        }
+        .request-list {
+          max-height: calc(100vh - 100px);
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        .request-item {
+          display: flex;
+          margin-bottom: 20px;
+          padding: 16px;
+          background: #f9f9f9;
+          border-left: 3px solid #1976d2;
+          border-radius: 4px;
+        }
+        .request-number {
+          font-weight: bold;
+          color: #666;
+          margin-right: 12px;
+          min-width: 24px;
+        }
+        .request-content {
+          flex: 1;
+        }
+        .request-time {
+          color: #666;
+          font-size: 11px;
+          margin-bottom: 4px;
+        }
+        .request-api {
+          color: #1976d2;
+          margin-bottom: 6px;
+          font-size: 14px;
+        }
+        .request-url {
+          color: #333;
+          margin-bottom: 6px;
+          word-break: break-all;
+        }
+        .request-method {
+          color: #666;
+          margin-bottom: 12px;
+          font-size: 12px;
+        }
+        .request-section {
+          margin-top: 12px;
+          margin-bottom: 8px;
+        }
+        .request-section-title {
+          font-weight: 600;
+          color: #424242;
+          margin-bottom: 4px;
+          font-size: 12px;
+        }
+        .request-pre {
+          background: #fafafa;
+          padding: 8px;
+          border-radius: 3px;
+          font-size: 11px;
+          margin-top: 4px;
+          overflow-x: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          border: 1px solid #e0e0e0;
+        }
+        .response-body {
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        .status-code {
+          padding: 4px 8px;
+          border-radius: 3px;
+          font-weight: 600;
+          display: inline-block;
+          margin-top: 4px;
+        }
+        .status-200 {
+          background: #e8f5e9;
+          color: #2e7d32;
+        }
+        .status-404, .status-403, .status-500, .status-503, .status-429 {
+          background: #ffebee;
+          color: #c62828;
+        }
+        .url-link {
+          color: #1976d2;
+          text-decoration: none;
+        }
+        .url-link:hover {
+          text-decoration: underline;
+        }
+        .url-link:visited {
+          color: #7b1fa2;
+        }
+        .request-list::-webkit-scrollbar {
+          width: 10px;
+        }
+        .request-list::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 5px;
+        }
+        .request-list::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 5px;
+        }
+        .request-list::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>История API-запросов (${apiRequests.length} из ${MAX_REQUESTS})</h1>
+      </div>
+      <div class="request-list">
+        ${requestsHtml}
+      </div>
+    </body>
+    </html>
+  `;
+
+  const requestWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    title: `История API-запросов (${apiRequests.length} из ${MAX_REQUESTS})`,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  requestWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  // Обработка кликов по ссылкам
+  requestWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  requestWindow.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+}
+
+/**
  * Показывает окно с последними ошибками API (с прокруткой и кликабельными ссылками)
  */
 function showApiErrors(): void {
@@ -1978,14 +2292,37 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
   // Используем count=10 чтобы получить больше результатов и найти наиболее подходящий
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=10&language=en`;
   console.log({url});
+  const startTime = Date.now();
   try {
     const res = await fetch(url);
+    const duration = Date.now() - startTime;
+    
+    // Получаем заголовки ответа
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+    
+    // Получаем тело ответа
+    const responseText = await res.text();
+    let responseBody: string | undefined;
+    try {
+      const jsonData = JSON.parse(responseText);
+      responseBody = JSON.stringify(jsonData, null, 2);
+    } catch {
+      responseBody = responseText;
+    }
+    
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
       addApiError("Geocoding API (поиск координат)", error, url, { statusCode: res.status });
+      addApiRequest("Geocoding API (поиск координат)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
-    const data: any = await res.json();
+    
+    addApiRequest("Geocoding API (поиск координат)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    
+    const data: any = JSON.parse(responseText);
     if (data && data.results && data.results.length > 0) {
       // Нормализуем названия для сравнения
       const cityLower = city.toLowerCase().trim();
@@ -2045,14 +2382,37 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
   // Используем reverse geocoding через search API с координатами
   const url = `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=ru`;
   console.log({url});
+  const startTime = Date.now();
   try {
     const res = await fetch(url);
+    const duration = Date.now() - startTime;
+    
+    // Получаем заголовки ответа
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+    
+    // Получаем тело ответа
+    const responseText = await res.text();
+    let responseBody: string | undefined;
+    try {
+      const jsonData = JSON.parse(responseText);
+      responseBody = JSON.stringify(jsonData, null, 2);
+    } catch {
+      responseBody = responseText;
+    }
+    
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
       addApiError("Geocoding API (поиск местоположения)", error, url, { statusCode: res.status });
+      addApiRequest("Geocoding API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
-    const data: any = await res.json();
+    
+    addApiRequest("Geocoding API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    
+    const data: any = JSON.parse(responseText);
     if (data && data.results && data.results.length > 0) {
       const location = data.results[0];
       return {
@@ -2164,14 +2524,37 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     return null;
   }
   
+  const startTime = Date.now();
   try {
     const res = await fetch(WEATHER_URL);
+    const duration = Date.now() - startTime;
+    
+    // Получаем заголовки ответа
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+    
+    // Получаем тело ответа
+    const responseText = await res.text();
+    let responseBody: string | undefined;
+    try {
+      const jsonData = JSON.parse(responseText);
+      responseBody = JSON.stringify(jsonData, null, 2);
+    } catch {
+      responseBody = responseText;
+    }
+    
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
       addApiError("Weather API", error, WEATHER_URL, { statusCode: res.status });
+      addApiRequest("Weather API", WEATHER_URL, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
-    const data: any = await res.json();
+    
+    addApiRequest("Weather API", WEATHER_URL, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    
+    const data: any = JSON.parse(responseText);
     if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
       const weathercode = typeof data.current_weather.weathercode === "number" 
         ? data.current_weather.weathercode 
@@ -2185,10 +2568,12 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     addApiError("Weather API", error, WEATHER_URL);
     return null;
   } catch (err) {
+    const duration = Date.now() - startTime;
     const error = err instanceof Error ? err : new Error(String(err));
     // Извлекаем код ошибки, если он есть
     const errorCode = (err as any)?.code;
     addApiError("Weather API", error, WEATHER_URL, errorCode ? { errorCode } : undefined);
+    addApiRequest("Weather API", WEATHER_URL, "GET", undefined, undefined, undefined, undefined, duration);
     console.error("Failed to fetch weather:", err);
     return null;
   }
@@ -2206,14 +2591,37 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
   // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
   const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&timezone=auto&forecast_days=7`;
   
+  const startTime = Date.now();
   try {
     const res = await fetch(extendedUrl);
+    const duration = Date.now() - startTime;
+    
+    // Получаем заголовки ответа
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+    
+    // Получаем тело ответа
+    const responseText = await res.text();
+    let responseBody: string | undefined;
+    try {
+      const jsonData = JSON.parse(responseText);
+      responseBody = JSON.stringify(jsonData, null, 2);
+    } catch {
+      responseBody = responseText;
+    }
+    
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
       addApiError("Weather API (расширенные данные)", error, extendedUrl, { statusCode: res.status });
+      addApiRequest("Weather API (расширенные данные)", extendedUrl, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
-    const data: any = await res.json();
+    
+    addApiRequest("Weather API (расширенные данные)", extendedUrl, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    
+    const data: any = JSON.parse(responseText);
     
     if (data && data.current_weather && data.daily) {
       const dailyForecast = [];
@@ -2306,9 +2714,11 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     }
     return null;
   } catch (err) {
+    const duration = Date.now() - startTime;
     const error = err instanceof Error ? err : new Error(String(err));
     const errorCode = (err as any)?.code;
     addApiError("Weather API (расширенные данные)", error, extendedUrl, errorCode ? { errorCode } : undefined);
+    addApiRequest("Weather API (расширенные данные)", extendedUrl, "GET", undefined, undefined, undefined, undefined, duration);
     console.error("Failed to fetch extended weather:", err);
     return null;
   }
@@ -2730,6 +3140,13 @@ async function updateTrayTemperature() {
   });
   menuItems.push({ type: "separator" });
   menuItems.push({
+    label: `Показать последние API-запросы${apiRequests.length > 0 ? ` (${apiRequests.length})` : ""}`,
+    click: () => {
+      showApiRequests();
+    },
+  });
+  menuItems.push({ type: "separator" });
+  menuItems.push({
     label: `Показать ошибки API${apiErrors.length > 0 ? ` (${apiErrors.length})` : ""}`,
     click: () => {
       showApiErrors();
@@ -2819,6 +3236,13 @@ async function updateTrayTemperature() {
     label: "Как пользоваться",
     click: () => {
       showHelp();
+    },
+  });
+  weatherMenuItems.push({ type: "separator" });
+  weatherMenuItems.push({
+    label: `Показать последние API-запросы${apiRequests.length > 0 ? ` (${apiRequests.length})` : ""}`,
+    click: () => {
+      showApiRequests();
     },
   });
   weatherMenuItems.push({ type: "separator" });
