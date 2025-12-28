@@ -1360,49 +1360,6 @@ async function showWeatherDetails(): Promise<void> {
     timezoneInfo = ` (${timezone}${utcOffset ? `, ${utcOffset}` : ""})`;
   }
 
-  // Форматируем почасовой прогноз на сегодня
-  const hourlyForecastHtml = weatherData.hourly.map((hour) => {
-    const hourTime = new Date(hour.time);
-    const hourStr = hourTime.toLocaleTimeString("ru-RU", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const emoji = getWeatherEmoji(hour.weathercode);
-    
-    return `
-      <div class="hourly-item">
-        <div class="hourly-time">${hourStr}</div>
-        <div class="hourly-emoji">${emoji}</div>
-        <div class="hourly-temp">${Math.round(hour.temperature)}°</div>
-      </div>
-    `;
-  }).join("");
-
-  // Форматируем прогноз
-  const forecastHtml = weatherData.daily.map((day, index) => {
-    const date = new Date(day.date);
-    const dayName = index === 0 ? "Сегодня" : 
-                   index === 1 ? "Завтра" :
-                   date.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-    const emoji = getWeatherEmoji(day.weathercode);
-    const description = getWeatherDescription(day.weathercode);
-    
-    return `
-      <div class="forecast-day">
-        <div class="forecast-day-header">
-          <span class="forecast-day-name">${dayName}</span>
-          <span class="forecast-emoji">${emoji}</span>
-        </div>
-        <div class="forecast-day-info">
-          <div class="forecast-description">${description}</div>
-          <div class="forecast-temp">
-            <span class="temp-max">${Math.round(day.temperature_max)}°</span>
-            <span class="temp-min">${Math.round(day.temperature_min)}°</span>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
 
   const html = `
     <!DOCTYPE html>
@@ -1719,22 +1676,6 @@ async function showWeatherDetails(): Promise<void> {
               <div class="current-detail-label">Время обновления</div>
               <div class="current-detail-value">${timeStr}${timezoneInfo}</div>
             </div>
-          </div>
-        </div>
-        
-        ${weatherData.hourly.length > 0 ? `
-        <div class="hourly-forecast">
-          <h2>🕐 Прогноз на сегодня по часам</h2>
-          <div class="hourly-list">
-            ${hourlyForecastHtml}
-          </div>
-        </div>
-        ` : ''}
-        
-        <div class="forecast-section">
-          <h2>📅 Прогноз на 7 дней</h2>
-          <div class="forecast-list">
-            ${forecastHtml}
           </div>
         </div>
         
@@ -2636,9 +2577,10 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         });
       }
       
-      // Обрабатываем почасовые данные на сегодня
+      // Обрабатываем почасовые данные на сегодня (только будущие часы)
       const hourlyForecast: Array<{ time: string; temperature: number; weathercode: number }> = [];
       if (data.hourly && data.hourly.time && data.hourly.temperature_2m && data.hourly.weathercode) {
+        const now = new Date();
         const today = new Date();
         const todayDateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
         
@@ -2646,8 +2588,8 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           const hourTime = new Date(data.hourly.time[i]);
           const hourDateStr = hourTime.toISOString().split('T')[0];
           
-          // Берем только данные на сегодня
-          if (hourDateStr === todayDateStr) {
+          // Берем только данные на сегодня и только будущие часы
+          if (hourDateStr === todayDateStr && hourTime > now) {
             hourlyForecast.push({
               time: data.hourly.time[i],
               temperature: data.hourly.temperature_2m[i],
