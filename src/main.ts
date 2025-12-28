@@ -302,12 +302,24 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   };
 
   // Обновляем глобальные переменные
-  CITY = mergedSettings.city;
-  COUNTRY = mergedSettings.country;
+  // Явно устанавливаем null/undefined, чтобы очистить старые значения
+  CITY = mergedSettings.city ?? undefined;
+  COUNTRY = mergedSettings.country ?? undefined;
   LATITUDE = mergedSettings.latitude ?? null;
   LONGITUDE = mergedSettings.longitude ?? null;
   UPDATE_INTERVAL_SECONDS = mergedSettings.updateIntervalInSeconds ?? 60;
   settings = mergedSettings;
+  
+  // Очищаем WEATHER_URL при изменении настроек, чтобы он пересоздался в initializeLocation
+  WEATHER_URL = "";
+  
+  // Если переключились с города/страны на координаты, очищаем старые названия
+  // чтобы они обновились по новым координатам
+  if (previousCity && previousCountry && (CITY === undefined || COUNTRY === undefined) && 
+      LATITUDE !== null && LONGITUDE !== null) {
+    cityName = "";
+    countryName = "";
+  }
 
   // Сохраняем в файл
   if (!saveSettings(mergedSettings)) {
@@ -2509,20 +2521,20 @@ async function initializeLocation(): Promise<boolean> {
   }
   // Если координаты указаны напрямую (в коде или через предыдущий запрос)
   if (LATITUDE !== null && LONGITUDE !== null) {
-    if (!WEATHER_URL) {
-      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
-    }
+    // Всегда обновляем WEATHER_URL при инициализации, чтобы использовать актуальные координаты
+    WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
     console.log(`Используются координаты: ${LATITUDE}, ${LONGITUDE}`);
     
-    // // Получаем название города и страны по координатам, если еще не получены
-    // if (!cityName || !countryName) {
-    //   const location = await fetchLocationByCoordinates(LATITUDE, LONGITUDE);
-    //   if (location) {
-    //     cityName = location.cityName;
-    //     countryName = location.countryName;
-    //     console.log(`Местоположение: ${cityName}, ${countryName}`);
-    //   }
-    // }
+    // Получаем название города и страны по координатам, если еще не получены
+    // или если переключились с города/страны на координаты (CITY и COUNTRY undefined)
+    if (!cityName || !countryName || (CITY === undefined && COUNTRY === undefined)) {
+      const location = await fetchLocationByCoordinates(LATITUDE, LONGITUDE);
+      if (location) {
+        cityName = location.cityName;
+        countryName = location.countryName;
+        console.log(`Местоположение обновлено по координатам: ${cityName}, ${countryName}`);
+      }
+    }
     return true;
   }
   
