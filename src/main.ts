@@ -2445,12 +2445,17 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
  * Получает название города и страны по координатам через Geocoding API
  */
 async function fetchLocationByCoordinates(latitude: number, longitude: number): Promise<{ cityName: string; countryName: string } | null> {
-  // Используем reverse geocoding через search API с координатами
-  const url = `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=ru`;
+  // Используем Nominatim (OpenStreetMap) для reverse geocoding, так как Open-Meteo не поддерживает это
+  // Nominatim - бесплатный и не требует API ключа
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&accept-language=ru`;
   console.log({url});
   const startTime = Date.now();
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'WeatherApp/1.0' // Nominatim требует User-Agent
+      }
+    });
     const duration = Date.now() - startTime;
     
     // Получаем заголовки ответа
@@ -2471,27 +2476,50 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
     
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
-      addApiError("Geocoding API (поиск местоположения)", error, url, { statusCode: res.status });
-      addApiRequest("Geocoding API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+      addApiError("Nominatim API (поиск местоположения)", error, url, { statusCode: res.status });
+      addApiRequest("Nominatim API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
     
-    addApiRequest("Geocoding API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    addApiRequest("Nominatim API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
     
     const data: any = JSON.parse(responseText);
-    if (data && data.results && data.results.length > 0) {
-      const location = data.results[0];
-      return {
-        cityName: location.name || "",
-        countryName: location.country || "",
-      };
+    
+    // Проверяем наличие ошибки в ответе
+    if (data && data.error) {
+      const errorMessage = data.error || "Unknown error from API";
+      const error = new Error(`API error: ${errorMessage}`);
+      addApiError("Nominatim API (поиск местоположения)", error, url);
+      console.error("API returned error:", errorMessage);
+      return null;
     }
+    
+    // Nominatim возвращает данные в формате address
+    if (data && data.address) {
+      const address = data.address;
+      // Извлекаем название города и страны из адреса
+      // Nominatim может возвращать разные поля в зависимости от типа местоположения
+      const cityName = address.city || address.town || address.village || address.municipality || address.county || "";
+      const countryName = address.country || "";
+      
+      if (cityName || countryName) {
+        return {
+          cityName: cityName,
+          countryName: countryName,
+        };
+      }
+    }
+    
+    // Если данных нет, это не ошибка - просто нет данных для этих координат
+    console.log("No location found for coordinates:", latitude, longitude);
     return null;
   } catch (err) {
+    const duration = Date.now() - startTime;
     const error = err instanceof Error ? err : new Error(String(err));
     // Извлекаем код ошибки, если он есть
     const errorCode = (err as any)?.code;
-    addApiError("Geocoding API (поиск местоположения)", error, url, errorCode ? { errorCode } : undefined);
+    addApiError("Nominatim API (поиск местоположения)", error, url, errorCode ? { errorCode } : undefined);
+    addApiRequest("Nominatim API (поиск местоположения)", url, "GET", undefined, undefined, undefined, undefined, duration);
     console.error("Failed to fetch location info:", err);
     return null;
   }
@@ -2525,9 +2553,10 @@ async function initializeLocation(): Promise<boolean> {
     WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
     console.log(`Используются координаты: ${LATITUDE}, ${LONGITUDE}`);
     
-    // Получаем название города и страны по координатам, если еще не получены
-    // или если переключились с города/страны на координаты (CITY и COUNTRY undefined)
-    if (!cityName || !countryName || (CITY === undefined && COUNTRY === undefined)) {
+    // Получаем название города и страны по координатам
+    // Если используются только координаты (CITY и COUNTRY undefined), всегда получаем названия
+    // Также получаем, если названия еще не были получены
+    if ((CITY === undefined && COUNTRY === undefined) || !cityName || !countryName) {
       const location = await fetchLocationByCoordinates(LATITUDE, LONGITUDE);
       if (location) {
         cityName = location.cityName;
