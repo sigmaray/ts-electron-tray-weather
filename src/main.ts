@@ -1324,8 +1324,21 @@ async function showWeatherDetails(): Promise<void> {
   };
   
   const formatTime = (timeStr: string): string => {
-    const time = new Date(timeStr);
-    return time.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    // Показываем время в том же формате, в котором оно пришло от API
+    // Добавляем информацию о таймзоне и UTC offset
+    if (weatherData.timezone) {
+      const timezone = weatherData.timezone;
+      let utcOffset = "";
+      if (weatherData.utc_offset_seconds !== undefined) {
+        const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
+        const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
+        const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
+        utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+      }
+      return `${timeStr} (${timezone}${utcOffset ? `, ${utcOffset}` : ""})`;
+    }
+    
+    return timeStr;
   };
   
   const calculateDaylight = (sunrise: string, sunset: string): string => {
@@ -1337,14 +1350,8 @@ async function showWeatherDetails(): Promise<void> {
     return `${hours}:${minutes.toString().padStart(2, "0")}`;
   };
   
-  const currentTime = new Date(weatherData.current.time);
-  const timeStr = currentTime.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // Показываем время в том же формате, в котором оно пришло от API
+  const timeStr = weatherData.current.time;
   
   // Форматируем информацию о часовом поясе и UTC offset
   let timezoneInfo = "";
@@ -1604,7 +1611,7 @@ async function showWeatherDetails(): Promise<void> {
             ` : ''}
             <div class="current-detail-item">
               <div class="current-detail-label">Ветер</div>
-              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${Math.round(weatherData.current.winddirection)}°, ${(weatherData.current.windspeed * 3.6).toFixed(1)} м/с ${getWindDescription(weatherData.current.windspeed * 3.6)}</div>
+              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${Math.round(weatherData.current.winddirection)}°, ${weatherData.current.windspeed.toFixed(1)} м/с ${getWindDescription(weatherData.current.windspeed)}</div>
             </div>
             ${weatherData.current.cloudcover !== undefined ? `
             <div class="current-detail-item">
@@ -2385,7 +2392,7 @@ async function initializeLocation(): Promise<boolean> {
       LONGITUDE = location.longitude;
       cityName = location.cityName;
       countryName = location.countryName;
-      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true`;
+      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
       console.log(`Координаты определены: ${LATITUDE}, ${LONGITUDE}`);
       console.log(`Местоположение: ${cityName}, ${countryName}`);
       return true;
@@ -2397,7 +2404,7 @@ async function initializeLocation(): Promise<boolean> {
   // Если координаты указаны напрямую (в коде или через предыдущий запрос)
   if (LATITUDE !== null && LONGITUDE !== null) {
     if (!WEATHER_URL) {
-      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true`;
+      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
     }
     console.log(`Используются координаты: ${LATITUDE}, ${LONGITUDE}`);
     
@@ -2530,7 +2537,7 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
   
   // URL для получения расширенных данных с прогнозом на 7 дней и почасовым прогнозом на сегодня
   // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
-  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&timezone=auto&forecast_days=7`;
+  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&windspeed_unit=ms&timezone=auto&forecast_days=7`;
   
   const startTime = Date.now();
   try {
