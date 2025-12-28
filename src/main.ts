@@ -1250,6 +1250,20 @@ async function showWeatherDetails(): Promise<void> {
     hour: "2-digit",
     minute: "2-digit",
   });
+  
+  // Форматируем информацию о часовом поясе и UTC offset
+  let timezoneInfo = "";
+  if (weatherData.timezone) {
+    const timezone = weatherData.timezone;
+    let utcOffset = "";
+    if (weatherData.utc_offset_seconds !== undefined) {
+      const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
+      const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
+      const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
+      utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+    }
+    timezoneInfo = ` (${timezone}${utcOffset ? `, ${utcOffset}` : ""})`;
+  }
 
   // Форматируем прогноз
   const forecastHtml = weatherData.daily.map((day, index) => {
@@ -1464,7 +1478,7 @@ async function showWeatherDetails(): Promise<void> {
             </div>
             <div class="current-detail-item">
               <div class="current-detail-label">Время обновления</div>
-              <div class="current-detail-value">${timeStr}</div>
+              <div class="current-detail-value">${timeStr}${timezoneInfo}</div>
             </div>
           </div>
         </div>
@@ -1477,7 +1491,7 @@ async function showWeatherDetails(): Promise<void> {
         </div>
         
         <div class="update-time">
-          Данные обновлены: ${timeStr}
+          Данные обновлены: ${timeStr}${timezoneInfo}
         </div>
       </div>
     </body>
@@ -1917,6 +1931,8 @@ interface ExtendedWeatherData {
     temperature_min: number;
     weathercode: number;
   }>;
+  timezone?: string;
+  utc_offset_seconds?: number;
 }
 
 async function fetchWeatherData(): Promise<WeatherData | null> {
@@ -1997,6 +2013,8 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           time: data.current_weather.time || new Date().toISOString(),
         },
         daily: dailyForecast,
+        timezone: data.timezone || undefined,
+        utc_offset_seconds: data.utc_offset_seconds || undefined,
       };
     }
     return null;
