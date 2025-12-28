@@ -1242,6 +1242,59 @@ async function showWeatherDetails(): Promise<void> {
   const locationString = cityName && countryName ? `${cityName}, ${countryName}` : 
                         (LATITUDE !== null && LONGITUDE !== null ? `${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}` : "Неизвестно");
   
+  // Вспомогательные функции для форматирования
+  const getWindDirection = (degrees: number): string => {
+    const directions = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"];
+    const index = Math.round(degrees / 45) % 8;
+    return directions[index];
+  };
+  
+  const getWindDescription = (speed: number): string => {
+    if (speed < 0.5) return "штиль";
+    if (speed < 1.6) return "легкий ветерок";
+    if (speed < 3.4) return "легкий ветер";
+    if (speed < 5.5) return "слабый ветер";
+    if (speed < 8.0) return "умеренный ветер";
+    if (speed < 10.8) return "свежий ветер";
+    if (speed < 13.9) return "сильный ветер";
+    if (speed < 17.2) return "крепкий ветер";
+    if (speed < 20.8) return "очень крепкий ветер";
+    if (speed < 24.5) return "шторм";
+    if (speed < 28.5) return "сильный шторм";
+    if (speed < 32.7) return "жестокий шторм";
+    return "ураган";
+  };
+  
+  const getUVDescription = (uv: number): string => {
+    if (uv < 3) return "Низкий";
+    if (uv < 6) return "Умеренный";
+    if (uv < 8) return "Высокий";
+    if (uv < 11) return "Очень высокий";
+    return "Экстремальный";
+  };
+  
+  const getComfortLevel = (dewpoint: number, humidity?: number): string => {
+    if (dewpoint < 10) return "Сухо";
+    if (dewpoint < 16) return "Комфортно";
+    if (dewpoint < 18) return "Умеренно";
+    if (dewpoint < 21) return "Влажно";
+    return "Очень влажно";
+  };
+  
+  const formatTime = (timeStr: string): string => {
+    const time = new Date(timeStr);
+    return time.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  };
+  
+  const calculateDaylight = (sunrise: string, sunset: string): string => {
+    const rise = new Date(sunrise);
+    const set = new Date(sunset);
+    const diff = set.getTime() - rise.getTime();
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    return `${hours}:${minutes.toString().padStart(2, "0")}`;
+  };
+  
   const currentTime = new Date(weatherData.current.time);
   const timeStr = currentTime.toLocaleString("ru-RU", {
     year: "numeric",
@@ -1385,8 +1438,9 @@ async function showWeatherDetails(): Promise<void> {
           margin-top: 16px;
           padding-top: 16px;
           border-top: 1px solid rgba(255,255,255,0.3);
-          display: flex;
-          gap: 24px;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 16px;
           font-size: 14px;
         }
         .current-detail-item {
@@ -1543,14 +1597,82 @@ async function showWeatherDetails(): Promise<void> {
             <div class="current-emoji">${getWeatherEmoji(weatherData.current.weathercode)}</div>
           </div>
           <div class="current-details">
+            ${weatherData.current.apparent_temperature !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Скорость ветра</div>
-              <div class="current-detail-value">${Math.round(weatherData.current.windspeed)} км/ч</div>
+              <div class="current-detail-label">Ощущается как</div>
+              <div class="current-detail-value">${Math.round(weatherData.current.apparent_temperature)}°</div>
             </div>
+            ` : ''}
             <div class="current-detail-item">
-              <div class="current-detail-label">Направление ветра</div>
-              <div class="current-detail-value">${Math.round(weatherData.current.winddirection)}°</div>
+              <div class="current-detail-label">Ветер</div>
+              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${Math.round(weatherData.current.winddirection)}°, ${(weatherData.current.windspeed * 3.6).toFixed(1)} м/с ${getWindDescription(weatherData.current.windspeed * 3.6)}</div>
             </div>
+            ${weatherData.current.cloudcover !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Облачность</div>
+              <div class="current-detail-value">${Math.round(weatherData.current.cloudcover)}% ${weatherData.current.cloudcover >= 75 ? "пасмурно" : weatherData.current.cloudcover >= 50 ? "облачно" : "малооблачно"}</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.surface_pressure !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Давление</div>
+              <div class="current-detail-value">${weatherData.current.surface_pressure.toFixed(1)} hPa</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.relativehumidity_2m !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Влажность</div>
+              <div class="current-detail-value">${Math.round(weatherData.current.relativehumidity_2m)}%</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.visibility !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Видимость</div>
+              <div class="current-detail-value">${weatherData.current.visibility.toFixed(1)} км</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.dewpoint_2m !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Точка росы</div>
+              <div class="current-detail-value">${Math.round(weatherData.current.dewpoint_2m)}°</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.dewpoint_2m !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Комфорт</div>
+              <div class="current-detail-value">${getComfortLevel(weatherData.current.dewpoint_2m, weatherData.current.relativehumidity_2m)}</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.precipitation !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Осадки</div>
+              <div class="current-detail-value">${weatherData.current.precipitation > 0 ? weatherData.current.precipitation.toFixed(1) + " мм" : "нет"}</div>
+            </div>
+            ` : ''}
+            ${weatherData.daily[0]?.sunrise ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Восход</div>
+              <div class="current-detail-value">${formatTime(weatherData.daily[0].sunrise)}</div>
+            </div>
+            ` : ''}
+            ${weatherData.daily[0]?.sunset ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">Закат</div>
+              <div class="current-detail-value">${formatTime(weatherData.daily[0].sunset)}</div>
+            </div>
+            ` : ''}
+            ${weatherData.daily[0]?.sunrise && weatherData.daily[0]?.sunset ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">День</div>
+              <div class="current-detail-value">${calculateDaylight(weatherData.daily[0].sunrise, weatherData.daily[0].sunset)}</div>
+            </div>
+            ` : ''}
+            ${weatherData.current.uv_index !== undefined ? `
+            <div class="current-detail-item">
+              <div class="current-detail-label">УФ индекс</div>
+              <div class="current-detail-value">${weatherData.current.uv_index.toFixed(1)} ${getUVDescription(weatherData.current.uv_index)}</div>
+            </div>
+            ` : ''}
             <div class="current-detail-item">
               <div class="current-detail-label">Время обновления</div>
               <div class="current-detail-value">${timeStr}${timezoneInfo}</div>
@@ -2008,12 +2130,22 @@ interface ExtendedWeatherData {
     windspeed: number;
     winddirection: number;
     time: string;
+    apparent_temperature?: number;
+    cloudcover?: number;
+    surface_pressure?: number;
+    relativehumidity_2m?: number;
+    dewpoint_2m?: number;
+    precipitation?: number;
+    uv_index?: number;
+    visibility?: number;
   };
   daily: Array<{
     date: string;
     temperature_max: number;
     temperature_min: number;
     weathercode: number;
+    sunrise?: string;
+    sunset?: string;
   }>;
   hourly: Array<{
     time: string;
@@ -2071,7 +2203,8 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
   }
   
   // URL для получения расширенных данных с прогнозом на 7 дней и почасовым прогнозом на сегодня
-  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7`;
+  // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
+  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&timezone=auto&forecast_days=7`;
   
   try {
     const res = await fetch(extendedUrl);
@@ -2090,6 +2223,8 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           temperature_max: data.daily.temperature_2m_max[i],
           temperature_min: data.daily.temperature_2m_min[i],
           weathercode: data.daily.weathercode[i],
+          sunrise: data.daily.sunrise ? data.daily.sunrise[i] : undefined,
+          sunset: data.daily.sunset ? data.daily.sunset[i] : undefined,
         });
       }
       
@@ -2114,13 +2249,54 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         }
       }
       
+      // Получаем текущие значения из current (если доступны) или из hourly для текущего часа
+      const currentData = data.current || {};
+      const currentTime = data.current_weather?.time || new Date().toISOString();
+      
+      // Находим индекс текущего часа в hourly данных
+      let currentHourIndex = -1;
+      if (data.hourly && data.hourly.time) {
+        for (let i = 0; i < data.hourly.time.length; i++) {
+          const hourTime = new Date(data.hourly.time[i]);
+          const currentTimeObj = new Date(currentTime);
+          // Проверяем, попадает ли текущее время в этот час (с точностью до часа)
+          if (hourTime.getTime() <= currentTimeObj.getTime() && 
+              currentTimeObj.getTime() < hourTime.getTime() + 3600000) {
+            currentHourIndex = i;
+            break;
+          }
+        }
+      }
+      
       return {
         current: {
           temperature: data.current_weather.temperature,
           weathercode: data.current_weather.weathercode || 0,
           windspeed: data.current_weather.windspeed || 0,
           winddirection: data.current_weather.winddirection || 0,
-          time: data.current_weather.time || new Date().toISOString(),
+          time: currentTime,
+          apparent_temperature: currentData.apparent_temperature || 
+                               (currentHourIndex >= 0 && data.hourly?.apparent_temperature ? 
+                                data.hourly.apparent_temperature[currentHourIndex] : undefined),
+          cloudcover: currentData.cloudcover || 
+                     (currentHourIndex >= 0 && data.hourly?.cloudcover ? 
+                      data.hourly.cloudcover[currentHourIndex] : undefined),
+          surface_pressure: currentData.surface_pressure || 
+                           (currentHourIndex >= 0 && data.hourly?.pressure_msl ? 
+                            data.hourly.pressure_msl[currentHourIndex] : undefined),
+          relativehumidity_2m: currentData.relativehumidity_2m || 
+                              (currentHourIndex >= 0 && data.hourly?.relativehumidity_2m ? 
+                               data.hourly.relativehumidity_2m[currentHourIndex] : undefined),
+          dewpoint_2m: currentData.dewpoint_2m || 
+                      (currentHourIndex >= 0 && data.hourly?.dewpoint_2m ? 
+                       data.hourly.dewpoint_2m[currentHourIndex] : undefined),
+          precipitation: currentData.precipitation || 
+                        (currentHourIndex >= 0 && data.hourly?.precipitation ? 
+                         data.hourly.precipitation[currentHourIndex] : undefined),
+          uv_index: currentData.uv_index || 
+                   (currentHourIndex >= 0 && data.hourly?.uv_index ? 
+                    data.hourly.uv_index[currentHourIndex] : undefined),
+          visibility: currentData.visibility || undefined,
         },
         daily: dailyForecast,
         hourly: hourlyForecast,
