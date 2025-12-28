@@ -1265,6 +1265,24 @@ async function showWeatherDetails(): Promise<void> {
     timezoneInfo = ` (${timezone}${utcOffset ? `, ${utcOffset}` : ""})`;
   }
 
+  // Форматируем почасовой прогноз на сегодня
+  const hourlyForecastHtml = weatherData.hourly.map((hour) => {
+    const hourTime = new Date(hour.time);
+    const hourStr = hourTime.toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const emoji = getWeatherEmoji(hour.weathercode);
+    
+    return `
+      <div class="hourly-item">
+        <div class="hourly-time">${hourStr}</div>
+        <div class="hourly-emoji">${emoji}</div>
+        <div class="hourly-temp">${Math.round(hour.temperature)}°</div>
+      </div>
+    `;
+  }).join("");
+
   // Форматируем прогноз
   const forecastHtml = weatherData.daily.map((day, index) => {
     const date = new Date(day.date);
@@ -1392,6 +1410,63 @@ async function showWeatherDetails(): Promise<void> {
           color: #1976d2;
           margin-bottom: 16px;
         }
+        .hourly-forecast {
+          background: #f9f9f9;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          padding: 16px;
+          margin-top: 24px;
+        }
+        .hourly-forecast h2 {
+          font-size: 20px;
+          font-weight: 600;
+          color: #1976d2;
+          margin-bottom: 16px;
+        }
+        .hourly-list {
+          display: flex;
+          gap: 12px;
+          overflow-x: auto;
+          padding-bottom: 8px;
+        }
+        .hourly-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          min-width: 70px;
+          padding: 12px 8px;
+          background: #fff;
+          border-radius: 8px;
+          border: 1px solid #e0e0e0;
+        }
+        .hourly-time {
+          font-size: 12px;
+          color: #666;
+          font-weight: 500;
+        }
+        .hourly-emoji {
+          font-size: 24px;
+        }
+        .hourly-temp {
+          font-size: 16px;
+          font-weight: 600;
+          color: #333;
+        }
+        .hourly-list::-webkit-scrollbar {
+          height: 6px;
+        }
+        .hourly-list::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 3px;
+        }
+        .hourly-list::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 3px;
+        }
+        .hourly-list::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
         .forecast-list {
           display: flex;
           flex-direction: column;
@@ -1482,6 +1557,15 @@ async function showWeatherDetails(): Promise<void> {
             </div>
           </div>
         </div>
+        
+        ${weatherData.hourly.length > 0 ? `
+        <div class="hourly-forecast">
+          <h2>🕐 Прогноз на сегодня по часам</h2>
+          <div class="hourly-list">
+            ${hourlyForecastHtml}
+          </div>
+        </div>
+        ` : ''}
         
         <div class="forecast-section">
           <h2>📅 Прогноз на 7 дней</h2>
@@ -1931,6 +2015,11 @@ interface ExtendedWeatherData {
     temperature_min: number;
     weathercode: number;
   }>;
+  hourly: Array<{
+    time: string;
+    temperature: number;
+    weathercode: number;
+  }>;
   timezone?: string;
   utc_offset_seconds?: number;
 }
@@ -1981,8 +2070,8 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     return null;
   }
   
-  // URL для получения расширенных данных с прогнозом на 7 дней
-  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=7`;
+  // URL для получения расширенных данных с прогнозом на 7 дней и почасовым прогнозом на сегодня
+  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7`;
   
   try {
     const res = await fetch(extendedUrl);
@@ -2004,6 +2093,27 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         });
       }
       
+      // Обрабатываем почасовые данные на сегодня
+      const hourlyForecast: Array<{ time: string; temperature: number; weathercode: number }> = [];
+      if (data.hourly && data.hourly.time && data.hourly.temperature_2m && data.hourly.weathercode) {
+        const today = new Date();
+        const todayDateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+        
+        for (let i = 0; i < data.hourly.time.length; i++) {
+          const hourTime = new Date(data.hourly.time[i]);
+          const hourDateStr = hourTime.toISOString().split('T')[0];
+          
+          // Берем только данные на сегодня
+          if (hourDateStr === todayDateStr) {
+            hourlyForecast.push({
+              time: data.hourly.time[i],
+              temperature: data.hourly.temperature_2m[i],
+              weathercode: data.hourly.weathercode[i],
+            });
+          }
+        }
+      }
+      
       return {
         current: {
           temperature: data.current_weather.temperature,
@@ -2013,6 +2123,7 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           time: data.current_weather.time || new Date().toISOString(),
         },
         daily: dailyForecast,
+        hourly: hourlyForecast,
         timezone: data.timezone || undefined,
         utc_offset_seconds: data.utc_offset_seconds || undefined,
       };
