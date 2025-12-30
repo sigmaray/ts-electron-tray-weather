@@ -12,10 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       datetime: ${{ steps.datetime.outputs.datetime }}
+      version: ${{ steps.version.outputs.version }}
     steps:
     - name: Get current date and time
       id: datetime
       run: echo "datetime=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+    - name: Generate semver version
+      id: version
+      run: |
+        datetime=$(date -u +'%Y%m%d-%H%M%S')
+        year=$(echo $datetime | cut -c1-4)
+        month=$(echo $datetime | cut -c5-6)
+        day=$(echo $datetime | cut -c7-8)
+        time=$(echo $datetime | cut -c10-)
+        version="$year.$month.$day-$time"
+        echo "version=$version" >> $GITHUB_OUTPUT
 
   build:
     needs: prepare
@@ -45,13 +56,13 @@ jobs:
 
     - name: Update version in package.json
       run: |
-        datetime="${{ needs.prepare.outputs.datetime }}"
+        version="${{ needs.prepare.outputs.version }}"
         if [ "$RUNNER_OS" == "Windows" ]; then
-          powershell -Command "(Get-Content package.json) -replace '\"version\": \".*\"', '\"version\": \"$datetime\"' | Set-Content package.json"
+          powershell -Command "(Get-Content package.json) -replace '\"version\": \".*\"', '\"version\": \"$version\"' | Set-Content package.json"
         elif [ "$RUNNER_OS" == "macOS" ]; then
-          sed -i '' "s/\"version\": \".*\"/\"version\": \"$datetime\"/" package.json
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$version\"/" package.json
         else
-          sed -i "s/\"version\": \".*\"/\"version\": \"$datetime\"/" package.json
+          sed -i "s/\"version\": \".*\"/\"version\": \"$version\"/" package.json
         fi
 
     - name: Build TypeScript
