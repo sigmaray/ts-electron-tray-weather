@@ -55,6 +55,7 @@ jobs:
       run: npm ci
 
     - name: Update version in package.json
+      shell: bash
       run: |
         version="${{ needs.prepare.outputs.version }}"
         if [ "$RUNNER_OS" == "Windows" ]; then
