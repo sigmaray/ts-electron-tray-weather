@@ -131,6 +131,13 @@ interface ApiRequest {
 const apiRequests: ApiRequest[] = [];
 const MAX_REQUESTS = 20;
 
+// Ссылки на открытые окна (для предотвращения дублирования)
+let settingsWindow: BrowserWindow | null = null;
+let weatherWindow: BrowserWindow | null = null;
+let requestWindow: BrowserWindow | null = null;
+let errorWindow: BrowserWindow | null = null;
+let helpWindow: BrowserWindow | null = null;
+
 /**
  * Извлекает детальную информацию из ошибки
  */
@@ -1038,10 +1045,20 @@ function showSettings(): void {
     </html>
   `;
 
+  // Проверяем, не открыто ли окно уже
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    if (settingsWindow.isMinimized()) {
+      settingsWindow.restore();
+    }
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+
   // Создаём окно для настроек
   const windowSize = { width: 650, height: 600 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
-  const settingsWindow = new BrowserWindow({
+  settingsWindow = new BrowserWindow({
     width: windowSize.width,
     height: windowSize.height,
     x: windowPosition.x,
@@ -1062,7 +1079,7 @@ function showSettings(): void {
   // Удаляем предыдущие обработчики для этого окна, если они есть
   const handler = async (event: any, newSettings: Partial<Settings>) => {
     // Проверяем, что событие пришло от нашего окна
-    if (event.sender !== settingsWindow.webContents) {
+    if (event.sender !== settingsWindow!.webContents) {
       return;
     }
 
@@ -1081,7 +1098,7 @@ function showSettings(): void {
       // Удаляем обработчик после успешного сохранения
       ipcMain.removeListener('save-settings', handler);
       // Закрываем окно настроек
-      settingsWindow.close();
+      settingsWindow!.close();
       // Показываем системное уведомление после закрытия окна
       setTimeout(() => {
         if (Notification.isSupported()) {
@@ -1100,7 +1117,7 @@ function showSettings(): void {
       const errorMessage = 'Не удалось применить настройки. Проверьте правильность введённых данных (координаты или город и страна). Приложение продолжит работать с предыдущими настройками.';
       event.sender.send('settings-error', [errorMessage]);
       // Показываем диалог асинхронно, чтобы не блокировать выполнение
-      dialog.showMessageBox(settingsWindow, {
+      dialog.showMessageBox(settingsWindow!, {
         type: 'error',
         title: 'Ошибка применения настроек',
         message: errorMessage,
@@ -1113,9 +1130,10 @@ function showSettings(): void {
 
   ipcMain.on('save-settings', handler);
 
-  // Удаляем обработчик при закрытии окна
+  // Обработчик закрытия окна: очищаем ссылку и удаляем IPC обработчик
   settingsWindow.on('closed', () => {
     ipcMain.removeListener('save-settings', handler);
+    settingsWindow = null;
   });
 }
 
@@ -1374,10 +1392,20 @@ function showHelp(): void {
     </html>
   `;
 
+  // Проверяем, не открыто ли окно уже
+  if (helpWindow && !helpWindow.isDestroyed()) {
+    if (helpWindow.isMinimized()) {
+      helpWindow.restore();
+    }
+    helpWindow.show();
+    helpWindow.focus();
+    return;
+  }
+
   // Создаём окно для отображения справки
   const windowSize = { width: 700, height: 700 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
-  const helpWindow = new BrowserWindow({
+  helpWindow = new BrowserWindow({
     width: windowSize.width,
     height: windowSize.height,
     x: windowPosition.x,
@@ -1387,6 +1415,11 @@ function showHelp(): void {
       nodeIntegration: true,
       contextIsolation: false,
     },
+  });
+
+  // Очищаем ссылку при закрытии окна
+  helpWindow.on('closed', () => {
+    helpWindow = null;
   });
 
   // Загружаем HTML-контент
@@ -1834,9 +1867,19 @@ async function showWeatherDetails(): Promise<void> {
     </html>
   `;
 
+  // Проверяем, не открыто ли окно уже
+  if (weatherWindow && !weatherWindow.isDestroyed()) {
+    if (weatherWindow.isMinimized()) {
+      weatherWindow.restore();
+    }
+    weatherWindow.show();
+    weatherWindow.focus();
+    return;
+  }
+
   const windowSize = { width: 700, height: 800 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
-  const weatherWindow = new BrowserWindow({
+  weatherWindow = new BrowserWindow({
     width: windowSize.width,
     height: windowSize.height,
     x: windowPosition.x,
@@ -1847,6 +1890,11 @@ async function showWeatherDetails(): Promise<void> {
       contextIsolation: true,
     },
     resizable: true,
+  });
+
+  // Очищаем ссылку при закрытии окна
+  weatherWindow.on('closed', () => {
+    weatherWindow = null;
   });
 
   weatherWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
@@ -2100,9 +2148,19 @@ function showApiRequests(): void {
     </html>
   `;
 
+  // Проверяем, не открыто ли окно уже
+  if (requestWindow && !requestWindow.isDestroyed()) {
+    if (requestWindow.isMinimized()) {
+      requestWindow.restore();
+    }
+    requestWindow.show();
+    requestWindow.focus();
+    return;
+  }
+
   const windowSize = { width: 900, height: 700 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
-  const requestWindow = new BrowserWindow({
+  requestWindow = new BrowserWindow({
     width: windowSize.width,
     height: windowSize.height,
     x: windowPosition.x,
@@ -2112,6 +2170,11 @@ function showApiRequests(): void {
       nodeIntegration: true,
       contextIsolation: false,
     },
+  });
+
+  // Очищаем ссылку при закрытии окна
+  requestWindow.on('closed', () => {
+    requestWindow = null;
   });
 
   requestWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
@@ -2354,10 +2417,20 @@ function showApiErrors(): void {
     </html>
   `;
 
+  // Проверяем, не открыто ли окно уже
+  if (errorWindow && !errorWindow.isDestroyed()) {
+    if (errorWindow.isMinimized()) {
+      errorWindow.restore();
+    }
+    errorWindow.show();
+    errorWindow.focus();
+    return;
+  }
+
   // Создаём окно для отображения ошибок
   const windowSize = { width: 800, height: 600 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
-  const errorWindow = new BrowserWindow({
+  errorWindow = new BrowserWindow({
     width: windowSize.width,
     height: windowSize.height,
     x: windowPosition.x,
@@ -2367,6 +2440,11 @@ function showApiErrors(): void {
       nodeIntegration: true,
       contextIsolation: false,
     },
+  });
+
+  // Очищаем ссылку при закрытии окна
+  errorWindow.on('closed', () => {
+    errorWindow = null;
   });
 
   // Загружаем HTML-контент
