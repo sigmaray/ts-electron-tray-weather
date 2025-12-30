@@ -47,7 +47,9 @@ jobs:
       run: |
         datetime="${{ needs.prepare.outputs.datetime }}"
         if [ "$RUNNER_OS" == "Windows" ]; then
-          (Get-Content package.json) -replace '"version": ".*"', "\"version\": \"$datetime\"" | Set-Content package.json
+          powershell -Command "(Get-Content package.json) -replace '\"version\": \".*\"', '\"version\": \"$datetime\"' | Set-Content package.json"
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$datetime\"/" package.json
         else
           sed -i "s/\"version\": \".*\"/\"version\": \"$datetime\"/" package.json
         fi
