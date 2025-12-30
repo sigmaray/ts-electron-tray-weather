@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell, ipcMain, Notification } from "electron";
+import { app, Tray, Menu, nativeImage, NativeImage, dialog, BrowserWindow, shell, ipcMain, Notification, screen } from "electron";
 import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -448,6 +448,20 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
   return {
     valid: errors.length === 0,
     errors,
+  };
+}
+
+/**
+ * Получает координаты для центрирования окна на основном мониторе
+ */
+function getWindowPositionOnPrimaryDisplay(width: number, height: number): { x: number; y: number } {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  const { x: screenX, y: screenY } = primaryDisplay.workArea;
+  
+  return {
+    x: Math.round(screenX + (screenWidth - width) / 2),
+    y: Math.round(screenY + (screenHeight - height) / 2),
   };
 }
 
@@ -1025,9 +1039,13 @@ function showSettings(): void {
   `;
 
   // Создаём окно для настроек
+  const windowSize = { width: 650, height: 600 };
+  const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   const settingsWindow = new BrowserWindow({
-    width: 650,
-    height: 600,
+    width: windowSize.width,
+    height: windowSize.height,
+    x: windowPosition.x,
+    y: windowPosition.y,
     title: "Настройки — Tray Weather",
     webPreferences: {
       nodeIntegration: true,
@@ -1357,9 +1375,13 @@ function showHelp(): void {
   `;
 
   // Создаём окно для отображения справки
+  const windowSize = { width: 700, height: 700 };
+  const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   const helpWindow = new BrowserWindow({
-    width: 700,
-    height: 700,
+    width: windowSize.width,
+    height: windowSize.height,
+    x: windowPosition.x,
+    y: windowPosition.y,
     title: "Как пользоваться — Tray Weather",
     webPreferences: {
       nodeIntegration: true,
@@ -1812,9 +1834,13 @@ async function showWeatherDetails(): Promise<void> {
     </html>
   `;
 
+  const windowSize = { width: 700, height: 800 };
+  const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   const weatherWindow = new BrowserWindow({
-    width: 700,
-    height: 800,
+    width: windowSize.width,
+    height: windowSize.height,
+    x: windowPosition.x,
+    y: windowPosition.y,
     title: "Подробная информация о погоде — Tray Weather",
     webPreferences: {
       nodeIntegration: false,
@@ -2074,9 +2100,13 @@ function showApiRequests(): void {
     </html>
   `;
 
+  const windowSize = { width: 900, height: 700 };
+  const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   const requestWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: windowSize.width,
+    height: windowSize.height,
+    x: windowPosition.x,
+    y: windowPosition.y,
     title: `История API-запросов (${apiRequests.length} из ${MAX_REQUESTS})`,
     webPreferences: {
       nodeIntegration: true,
@@ -2325,9 +2355,13 @@ function showApiErrors(): void {
   `;
 
   // Создаём окно для отображения ошибок
+  const windowSize = { width: 800, height: 600 };
+  const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   const errorWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: windowSize.width,
+    height: windowSize.height,
+    x: windowPosition.x,
+    y: windowPosition.y,
     title: `История ошибок API (${apiErrors.length} из ${MAX_ERRORS})`,
     webPreferences: {
       nodeIntegration: true,
