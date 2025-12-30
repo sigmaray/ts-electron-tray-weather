@@ -1442,6 +1442,12 @@ function showHelp(): void {
  * Показывает окно с подробной информацией о погоде и прогнозом
  */
 async function showWeatherDetails(): Promise<void> {
+  // Проверяем, не открыто ли окно уже - если открыто, закрываем его
+  if (weatherWindow && !weatherWindow.isDestroyed()) {
+    weatherWindow.close();
+    return;
+  }
+
   const weatherData = await fetchExtendedWeatherData();
   
   if (!weatherData) {
@@ -1866,16 +1872,6 @@ async function showWeatherDetails(): Promise<void> {
     </body>
     </html>
   `;
-
-  // Проверяем, не открыто ли окно уже
-  if (weatherWindow && !weatherWindow.isDestroyed()) {
-    if (weatherWindow.isMinimized()) {
-      weatherWindow.restore();
-    }
-    weatherWindow.show();
-    weatherWindow.focus();
-    return;
-  }
 
   const windowSize = { width: 700, height: 800 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
