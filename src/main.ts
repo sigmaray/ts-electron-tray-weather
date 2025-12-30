@@ -1904,18 +1904,20 @@ async function showWeatherDetails(): Promise<void> {
  * Показывает окно с последними API-запросами
  */
 function showApiRequests(): void {
-  if (apiRequests.length === 0) {
-    dialog.showMessageBox({
-      type: "info",
-      title: "История API-запросов",
-      message: "Запросов не было",
-      detail: "История запросов пуста.",
-    });
+  // Проверяем, не открыто ли окно уже
+  if (requestWindow && !requestWindow.isDestroyed()) {
+    if (requestWindow.isMinimized()) {
+      requestWindow.restore();
+    }
+    requestWindow.show();
+    requestWindow.focus();
     return;
   }
 
   // Форматируем запросы для HTML-отображения
-  const requestsHtml = apiRequests
+  const requestsHtml = apiRequests.length === 0
+    ? '<div style="text-align: center; padding: 40px; color: #666; font-size: 14px;"><p style="margin-bottom: 8px; font-weight: 500;">Запросов не было</p><p style="font-size: 12px; color: #999;">История запросов пуста.</p></div>'
+    : apiRequests
     .slice()
     .reverse() // Показываем последние запросы первыми
     .map((req, index) => {
@@ -2004,7 +2006,7 @@ function showApiRequests(): void {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>История API-запросов (${apiRequests.length} из ${MAX_REQUESTS})</title>
+      <title>История API-запросов (${apiRequests.length} из ${MAX_REQUESTS} максимально хранящихся)</title>
       <style>
         * {
           margin: 0;
@@ -2139,7 +2141,7 @@ function showApiRequests(): void {
     </head>
     <body>
       <div class="header">
-        <h1>История API-запросов (${apiRequests.length} из ${MAX_REQUESTS})</h1>
+        <h1>История API-запросов (${apiRequests.length} из ${MAX_REQUESTS} максимально хранящихся)</h1>
       </div>
       <div class="request-list">
         ${requestsHtml}
@@ -2147,16 +2149,6 @@ function showApiRequests(): void {
     </body>
     </html>
   `;
-
-  // Проверяем, не открыто ли окно уже
-  if (requestWindow && !requestWindow.isDestroyed()) {
-    if (requestWindow.isMinimized()) {
-      requestWindow.restore();
-    }
-    requestWindow.show();
-    requestWindow.focus();
-    return;
-  }
 
   const windowSize = { width: 900, height: 700 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
@@ -2195,18 +2187,20 @@ function showApiRequests(): void {
  * Показывает окно с последними ошибками API (с прокруткой и кликабельными ссылками)
  */
 function showApiErrors(): void {
-  if (apiErrors.length === 0) {
-    dialog.showMessageBox({
-      type: "info",
-      title: "История ошибок API",
-      message: "Ошибок не было",
-      detail: "Все запросы к API выполнялись успешно.",
-    });
+  // Проверяем, не открыто ли окно уже
+  if (errorWindow && !errorWindow.isDestroyed()) {
+    if (errorWindow.isMinimized()) {
+      errorWindow.restore();
+    }
+    errorWindow.show();
+    errorWindow.focus();
     return;
   }
 
   // Форматируем ошибки для HTML-отображения
-  const errorsHtml = apiErrors
+  const errorsHtml = apiErrors.length === 0
+    ? '<div style="text-align: center; padding: 40px; color: #666; font-size: 14px;"><p style="margin-bottom: 8px; font-weight: 500;">Ошибок не было</p><p style="font-size: 12px; color: #999;">Все запросы к API выполнялись успешно.</p></div>'
+    : apiErrors
     .map((err, index) => {
       const timeStr = err.timestamp.toLocaleTimeString("ru-RU", {
         hour: "2-digit",
@@ -2416,16 +2410,6 @@ function showApiErrors(): void {
     </body>
     </html>
   `;
-
-  // Проверяем, не открыто ли окно уже
-  if (errorWindow && !errorWindow.isDestroyed()) {
-    if (errorWindow.isMinimized()) {
-      errorWindow.restore();
-    }
-    errorWindow.show();
-    errorWindow.focus();
-    return;
-  }
 
   // Создаём окно для отображения ошибок
   const windowSize = { width: 800, height: 600 };
