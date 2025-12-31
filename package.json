@@ -8,12 +8,16 @@
     "dev": "npm run build && electron --no-sandbox .",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "build:electron": "electron-builder --publish never"
+    "build:electron": "electron-builder --publish never",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@playwright/test": "^1.48.0",
     "electron-builder": "^24.13.3",
     "typescript": "^5.7.2",
     "electron": "^39.2.7"

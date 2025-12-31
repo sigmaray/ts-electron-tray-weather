@@ -38,4 +38,9 @@ Thumbs.db
 
 # Settings
 settings.json
+settings.test.json
 
+# Test results
+test-results/
+playwright-report/
+playwright/.cache/
