@@ -15,6 +15,8 @@ interface Settings {
   latitude?: number | null;
   longitude?: number | null;
   updateIntervalInSeconds?: number;
+  apiProvider?: 'open-meteo' | 'openweathermap';
+  apiKey?: string;
 }
 
 // Определяем путь к settings.json файлу (в корне проекта)
@@ -47,6 +49,8 @@ function loadSettings(): Settings {
       latitude: null,
       longitude: null,
       updateIntervalInSeconds: 60,
+      apiProvider: 'open-meteo',
+      apiKey: undefined,
     };
     fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2), "utf8");
     console.log(`Создан файл settings.json с дефолтными значениями: ${settingsPath}`);
@@ -61,6 +65,10 @@ function loadSettings(): Settings {
     if (settings.updateIntervalInSeconds === undefined || settings.updateIntervalInSeconds === null) {
       settings.updateIntervalInSeconds = 60;
     }
+    // Устанавливаем значение по умолчанию для apiProvider, если оно отсутствует
+    if (!settings.apiProvider || (settings.apiProvider !== 'open-meteo' && settings.apiProvider !== 'openweathermap')) {
+      settings.apiProvider = 'open-meteo';
+    }
     console.log(`Загружен файл settings.json: ${settingsPath}`);
     return settings;
   } catch (err) {
@@ -72,6 +80,8 @@ function loadSettings(): Settings {
       latitude: null,
       longitude: null,
       updateIntervalInSeconds: 60,
+      apiProvider: 'open-meteo',
+      apiKey: undefined,
     };
   }
 }
@@ -91,7 +101,13 @@ let LONGITUDE: number | null = settings.longitude ?? null;
 // Интервал обновления температуры в секундах (по умолчанию 60)
 let UPDATE_INTERVAL_SECONDS: number = settings.updateIntervalInSeconds ?? 60;
 
-// Open-Meteo API (без ключа, бесплатно)
+// API провайдер (по умолчанию open-meteo)
+let API_PROVIDER: 'open-meteo' | 'openweathermap' = settings.apiProvider ?? 'open-meteo';
+
+// API ключ (требуется для openweathermap)
+let API_KEY: string | undefined = settings.apiKey;
+
+// URL для запроса погоды (генерируется в initializeLocation)
 let WEATHER_URL = "";
 
 let tray: Tray | null = null;
@@ -301,6 +317,8 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   const previousWeatherUrl = WEATHER_URL;
   const previousCityName = cityName;
   const previousCountryName = countryName;
+  const previousApiProvider = API_PROVIDER;
+  const previousApiKey = API_KEY;
 
   // Объединяем с текущими настройками (на случай частичного обновления)
   const mergedSettings: Settings = {
@@ -315,6 +333,8 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   LATITUDE = mergedSettings.latitude ?? null;
   LONGITUDE = mergedSettings.longitude ?? null;
   UPDATE_INTERVAL_SECONDS = mergedSettings.updateIntervalInSeconds ?? 60;
+  API_PROVIDER = mergedSettings.apiProvider ?? 'open-meteo';
+  API_KEY = mergedSettings.apiKey;
   settings = mergedSettings;
   
   // Очищаем WEATHER_URL при изменении настроек, чтобы он пересоздался в initializeLocation
@@ -339,6 +359,8 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
     WEATHER_URL = previousWeatherUrl;
     cityName = previousCityName;
     countryName = previousCountryName;
+    API_PROVIDER = previousApiProvider;
+    API_KEY = previousApiKey;
     settings = previousSettings;
     return false;
   }
@@ -355,6 +377,8 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
     WEATHER_URL = previousWeatherUrl;
     cityName = previousCityName;
     countryName = previousCountryName;
+    API_PROVIDER = previousApiProvider;
+    API_KEY = previousApiKey;
     settings = previousSettings;
     // Восстанавливаем файл с предыдущими настройками
     saveSettings(previousSettings);
@@ -423,12 +447,27 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
     errors.push("Страна не может быть пустой строкой (используйте null для очистки)");
   }
 
-  // Проверка: должны быть указаны либо координаты, либо город и страна
-  // Объединяем с текущими настройками для проверки
+  // Валидация apiProvider
+  if (newSettings.apiProvider !== undefined) {
+    if (newSettings.apiProvider !== 'open-meteo' && newSettings.apiProvider !== 'openweathermap') {
+      errors.push("API провайдер должен быть 'open-meteo' или 'openweathermap'");
+    }
+  }
+
+  // Валидация apiKey: обязателен для openweathermap
   const mergedForValidation: Settings = {
     ...settings,
     ...newSettings,
   };
+  const finalApiProvider = mergedForValidation.apiProvider ?? 'open-meteo';
+  if (finalApiProvider === 'openweathermap') {
+    const apiKey = mergedForValidation.apiKey;
+    if (!apiKey || apiKey.trim() === '') {
+      errors.push("API ключ обязателен при использовании OpenWeatherMap API");
+    }
+  }
+
+  // Проверка: должны быть указаны либо координаты, либо город и страна
 
   // Проверяем наличие координат (хотя бы одна заполнена)
   const hasAnyCoordinate = (mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined) ||
@@ -801,6 +840,30 @@ function showSettings(): void {
             <div class="error-message" id="updateIntervalError"></div>
           </div>
 
+          <div class="form-group">
+            <label>
+              API Провайдер
+              <span class="label-hint">(выберите источник данных о погоде)</span>
+            </label>
+            <select id="apiProvider" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+              <option value="open-meteo">Open-Meteo (бесплатно, без ключа)</option>
+              <option value="openweathermap">OpenWeatherMap (требуется API ключ)</option>
+            </select>
+            <div class="error-message" id="apiProviderError"></div>
+          </div>
+
+          <div class="form-group" id="apiKeyGroup" style="display: none;">
+            <label>
+              API Ключ (OpenWeatherMap)
+              <span class="label-hint">(обязательно для OpenWeatherMap)</span>
+            </label>
+            <input type="text" id="apiKey" placeholder="Введите ваш API ключ от OpenWeatherMap">
+            <div class="error-message" id="apiKeyError"></div>
+            <p style="margin-top: 8px; font-size: 12px; color: #757575;">
+              Получить API ключ можно на <a href="https://openweathermap.org/api" target="_blank" style="color: #1976d2;">openweathermap.org/api</a>
+            </p>
+          </div>
+
           <div class="buttons">
             <button type="button" class="btn-cancel" id="cancelBtn">Отмена</button>
             <button type="submit" class="btn-save" id="saveBtn">Сохранить</button>
@@ -820,6 +883,23 @@ function showSettings(): void {
         document.getElementById('latitude').value = currentSettings.latitude !== null && currentSettings.latitude !== undefined ? currentSettings.latitude : '';
         document.getElementById('longitude').value = currentSettings.longitude !== null && currentSettings.longitude !== undefined ? currentSettings.longitude : '';
         document.getElementById('updateInterval').value = currentSettings.updateIntervalInSeconds || 60;
+        document.getElementById('apiProvider').value = currentSettings.apiProvider || 'open-meteo';
+        document.getElementById('apiKey').value = currentSettings.apiKey || '';
+        
+        // Показываем/скрываем поле API ключа в зависимости от выбранного провайдера
+        const apiProviderSelect = document.getElementById('apiProvider');
+        const apiKeyGroup = document.getElementById('apiKeyGroup');
+        
+        function toggleApiKeyField() {
+          if (apiProviderSelect.value === 'openweathermap') {
+            apiKeyGroup.style.display = 'block';
+          } else {
+            apiKeyGroup.style.display = 'none';
+          }
+        }
+        
+        toggleApiKeyField();
+        apiProviderSelect.addEventListener('change', toggleApiKeyField);
 
         // Проверяем при загрузке: если заполнены оба варианта, очищаем координаты (приоритет у города/страны)
         const hasCityCountry = (currentSettings.city && currentSettings.city.trim() !== '') &&
@@ -864,6 +944,8 @@ function showSettings(): void {
           const latitudeValue = document.getElementById('latitude').value.trim();
           const longitudeValue = document.getElementById('longitude').value.trim();
           const updateIntervalValue = document.getElementById('updateInterval').value.trim();
+          const apiProviderValue = document.getElementById('apiProvider').value;
+          const apiKeyValue = document.getElementById('apiKey').value.trim();
 
           const newSettings = {
             city: cityValue === '' ? null : cityValue,
@@ -871,6 +953,8 @@ function showSettings(): void {
             latitude: latitudeValue === '' ? null : (isNaN(parseFloat(latitudeValue)) ? null : parseFloat(latitudeValue)),
             longitude: longitudeValue === '' ? null : (isNaN(parseFloat(longitudeValue)) ? null : parseFloat(longitudeValue)),
             updateIntervalInSeconds: updateIntervalValue === '' ? 60 : parseInt(updateIntervalValue, 10),
+            apiProvider: apiProviderValue,
+            apiKey: apiKeyValue === '' ? undefined : apiKeyValue,
           };
 
           // Валидация на стороне клиента (базовая)
@@ -883,6 +967,19 @@ function showSettings(): void {
             validation.valid = false;
             validation.errors.push('Интервал обновления должен быть не менее 1 секунды');
             showFieldError('updateInterval', 'Интервал должен быть не менее 1 секунды');
+          }
+
+          // Валидация API провайдера и ключа
+          if (newSettings.apiProvider !== 'open-meteo' && newSettings.apiProvider !== 'openweathermap') {
+            validation.valid = false;
+            validation.errors.push('Неверный API провайдер');
+            showFieldError('apiProvider', 'Выберите корректный API провайдер');
+          }
+
+          if (newSettings.apiProvider === 'openweathermap' && (!newSettings.apiKey || newSettings.apiKey.trim() === '')) {
+            validation.valid = false;
+            validation.errors.push('API ключ обязателен при использовании OpenWeatherMap');
+            showFieldError('apiKey', 'API ключ обязателен для OpenWeatherMap');
           }
 
           if (newSettings.latitude !== null && (isNaN(newSettings.latitude) || newSettings.latitude < -90 || newSettings.latitude > 90)) {
@@ -1056,7 +1153,7 @@ function showSettings(): void {
   }
 
   // Создаём окно для настроек
-  const windowSize = { width: 650, height: 600 };
+  const windowSize = { width: 650, height: 700 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   settingsWindow = new BrowserWindow({
     width: windowSize.width,
@@ -2630,7 +2727,12 @@ async function initializeLocation(): Promise<boolean> {
       LONGITUDE = location.longitude;
       cityName = location.cityName;
       countryName = location.countryName;
-      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
+      // Генерируем URL в зависимости от выбранного API провайдера
+      if (API_PROVIDER === 'openweathermap' && API_KEY) {
+        WEATHER_URL = `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
+      } else {
+        WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
+      }
       console.log(`Координаты определены: ${LATITUDE}, ${LONGITUDE}`);
       console.log(`Местоположение: ${cityName}, ${countryName}`);
       return true;
@@ -2642,7 +2744,12 @@ async function initializeLocation(): Promise<boolean> {
   // Если координаты указаны напрямую (в коде или через предыдущий запрос)
   if (LATITUDE !== null && LONGITUDE !== null) {
     // Всегда обновляем WEATHER_URL при инициализации, чтобы использовать актуальные координаты
-    WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
+    // Генерируем URL в зависимости от выбранного API провайдера
+    if (API_PROVIDER === 'openweathermap' && API_KEY) {
+      WEATHER_URL = `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
+    } else {
+      WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&windspeed_unit=ms`;
+    }
     console.log(`Используются координаты: ${LATITUDE}, ${LONGITUDE}`);
     
     // Получаем название города и страны по координатам
@@ -2742,15 +2849,34 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     addApiRequest("Weather API", WEATHER_URL, "GET", undefined, res.status, responseHeaders, responseBody, duration);
     
     const data: any = JSON.parse(responseText);
-    if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
-      const weathercode = typeof data.current_weather.weathercode === "number" 
-        ? data.current_weather.weathercode 
-        : 0;
-      return {
-        temperature: data.current_weather.temperature,
-        weathercode: weathercode
-      };
+    
+    // Обрабатываем ответ в зависимости от API провайдера
+    if (API_PROVIDER === 'openweathermap') {
+      // OpenWeatherMap API формат
+      if (data && data.main && typeof data.main.temp === "number") {
+        // Конвертируем weather code из OpenWeatherMap в формат Open-Meteo (WMO)
+        // OpenWeatherMap использует свои коды, но мы можем использовать id из weather[0]
+        const weathercode = data.weather && data.weather[0] && typeof data.weather[0].id === "number" 
+          ? data.weather[0].id 
+          : 0;
+        return {
+          temperature: data.main.temp,
+          weathercode: weathercode
+        };
+      }
+    } else {
+      // Open-Meteo API формат
+      if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
+        const weathercode = typeof data.current_weather.weathercode === "number" 
+          ? data.current_weather.weathercode 
+          : 0;
+        return {
+          temperature: data.current_weather.temperature,
+          weathercode: weathercode
+        };
+      }
     }
+    
     const error = new Error("Неверный формат ответа API: отсутствует температура");
     addApiError("Weather API", error, WEATHER_URL);
     return null;
@@ -2774,9 +2900,16 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     return null;
   }
   
-  // URL для получения расширенных данных с прогнозом на 7 дней и почасовым прогнозом на сегодня
-  // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
-  const extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&windspeed_unit=ms&timezone=auto&forecast_days=7`;
+  // URL для получения расширенных данных в зависимости от API провайдера
+  let extendedUrl: string;
+  if (API_PROVIDER === 'openweathermap' && API_KEY) {
+    // OpenWeatherMap 5-day/3-hour forecast API
+    extendedUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
+  } else {
+    // Open-Meteo API: расширенные данные с прогнозом на 7 дней и почасовым прогнозом на сегодня
+    // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
+    extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&windspeed_unit=ms&timezone=auto&forecast_days=7`;
+  }
   
   const startTime = Date.now();
   try {
@@ -2810,6 +2943,88 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     
     const data: any = JSON.parse(responseText);
     
+    // Обрабатываем ответ в зависимости от API провайдера
+    if (API_PROVIDER === 'openweathermap') {
+      // OpenWeatherMap 5-day forecast API формат
+      // Для упрощения, используем текущую погоду и прогноз из списка
+      if (data && data.list && data.list.length > 0) {
+        const current = data.list[0];
+        const currentMain = current.main || {};
+        const currentWeather = current.weather && current.weather[0] ? current.weather[0] : {};
+        
+        // Формируем дневной прогноз (группируем по дням)
+        const dailyForecast: Array<{ date: string; temperature_max: number; temperature_min: number; weathercode: number; sunrise?: string; sunset?: string }> = [];
+        const dailyMap = new Map<string, { temps: number[]; weathercodes: number[] }>();
+        
+        data.list.forEach((item: any) => {
+          const date = new Date(item.dt * 1000);
+          const dateStr = date.toISOString().split('T')[0];
+          if (!dailyMap.has(dateStr)) {
+            dailyMap.set(dateStr, { temps: [], weathercodes: [] });
+          }
+          const dayData = dailyMap.get(dateStr)!;
+          dayData.temps.push(item.main.temp);
+          if (item.weather && item.weather[0]) {
+            dayData.weathercodes.push(item.weather[0].id);
+          }
+        });
+        
+        // Формируем прогноз на 7 дней
+        let dayCount = 0;
+        for (const [dateStr, dayData] of dailyMap.entries()) {
+          if (dayCount >= 7) break;
+          dailyForecast.push({
+            date: dateStr,
+            temperature_max: Math.max(...dayData.temps),
+            temperature_min: Math.min(...dayData.temps),
+            weathercode: dayData.weathercodes[0] || 0,
+          });
+          dayCount++;
+        }
+        
+        // Формируем почасовой прогноз на сегодня
+        const hourlyForecast: Array<{ time: string; temperature: number; weathercode: number }> = [];
+        const now = new Date();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        data.list.forEach((item: any) => {
+          const itemTime = new Date(item.dt * 1000);
+          if (itemTime >= now && itemTime.getDate() === today.getDate()) {
+            hourlyForecast.push({
+              time: itemTime.toISOString(),
+              temperature: item.main.temp,
+              weathercode: item.weather && item.weather[0] ? item.weather[0].id : 0,
+            });
+          }
+        });
+        
+        return {
+          current: {
+            temperature: currentMain.temp || 0,
+            weathercode: currentWeather.id || 0,
+            windspeed: current.wind ? (current.wind.speed || 0) : 0,
+            winddirection: current.wind ? (current.wind.deg || 0) : 0,
+            time: new Date(current.dt * 1000).toISOString(),
+            apparent_temperature: currentMain.feels_like,
+            cloudcover: current.clouds ? current.clouds : undefined,
+            surface_pressure: currentMain.pressure ? currentMain.pressure * 100 : undefined, // Конвертируем из hPa в Pa
+            relativehumidity_2m: currentMain.humidity,
+            dewpoint_2m: undefined, // OpenWeatherMap не предоставляет точку росы напрямую
+            precipitation: current.rain ? (current.rain['3h'] || 0) : undefined,
+            uv_index: undefined, // OpenWeatherMap не предоставляет UV индекс в базовом API
+            visibility: current.visibility ? current.visibility / 1000 : undefined, // Конвертируем из метров в километры
+          },
+          daily: dailyForecast,
+          hourly: hourlyForecast,
+          timezone: data.city ? data.city.timezone : undefined,
+          utc_offset_seconds: undefined,
+        };
+      }
+      return null;
+    }
+    
+    // Open-Meteo API формат
     if (data && data.current_weather && data.daily) {
       const dailyForecast = [];
       for (let i = 0; i < Math.min(7, data.daily.time.length); i++) {
