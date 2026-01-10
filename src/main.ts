@@ -2854,11 +2854,12 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     if (API_PROVIDER === 'openweathermap') {
       // OpenWeatherMap API формат
       if (data && data.main && typeof data.main.temp === "number") {
-        // Конвертируем weather code из OpenWeatherMap в формат Open-Meteo (WMO)
-        // OpenWeatherMap использует свои коды, но мы можем использовать id из weather[0]
-        const weathercode = data.weather && data.weather[0] && typeof data.weather[0].id === "number" 
+        // Конвертируем weather code из OpenWeatherMap в формат WMO
+        const owmCode = data.weather && data.weather[0] && typeof data.weather[0].id === "number" 
           ? data.weather[0].id 
-          : 0;
+          : 800; // По умолчанию ясно (800 = Clear sky в OpenWeatherMap)
+        const weathercode = convertOpenWeatherMapToWMO(owmCode);
+        console.log(`OpenWeatherMap: код ${owmCode} конвертирован в WMO ${weathercode}`);
         return {
           temperature: data.main.temp,
           weathercode: weathercode
@@ -2973,11 +2974,14 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         let dayCount = 0;
         for (const [dateStr, dayData] of dailyMap.entries()) {
           if (dayCount >= 7) break;
+          // Конвертируем код OpenWeatherMap в WMO для первого кода дня
+          const owmCode = dayData.weathercodes[0] || 800;
+          const wmoCode = convertOpenWeatherMapToWMO(owmCode);
           dailyForecast.push({
             date: dateStr,
             temperature_max: Math.max(...dayData.temps),
             temperature_min: Math.min(...dayData.temps),
-            weathercode: dayData.weathercodes[0] || 0,
+            weathercode: wmoCode,
           });
           dayCount++;
         }
@@ -2991,18 +2995,24 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         data.list.forEach((item: any) => {
           const itemTime = new Date(item.dt * 1000);
           if (itemTime >= now && itemTime.getDate() === today.getDate()) {
+            const owmCode = item.weather && item.weather[0] ? item.weather[0].id : 800;
+            const wmoCode = convertOpenWeatherMapToWMO(owmCode);
             hourlyForecast.push({
               time: itemTime.toISOString(),
               temperature: item.main.temp,
-              weathercode: item.weather && item.weather[0] ? item.weather[0].id : 0,
+              weathercode: wmoCode,
             });
           }
         });
         
+        // Конвертируем текущий код погоды из OpenWeatherMap в WMO
+        const currentOwmCode = currentWeather.id || 800;
+        const currentWmoCode = convertOpenWeatherMapToWMO(currentOwmCode);
+        
         return {
           current: {
             temperature: currentMain.temp || 0,
-            weathercode: currentWeather.id || 0,
+            weathercode: currentWmoCode,
             windspeed: current.wind ? (current.wind.speed || 0) : 0,
             winddirection: current.wind ? (current.wind.deg || 0) : 0,
             time: new Date(current.dt * 1000).toISOString(),
@@ -3189,6 +3199,72 @@ function createTemperatureIcon(text: string): NativeImage {
 function createBaseIcon(): NativeImage {
   // Базовая иконка до первой загрузки температуры
   return createTemperatureIcon("--");
+}
+
+/**
+ * Конвертирует код погоды OpenWeatherMap в WMO код
+ * OpenWeatherMap использует свои коды (200-804), которые нужно конвертировать в WMO (0-99)
+ */
+function convertOpenWeatherMapToWMO(owmCode: number): number {
+  // Гроза (Thunderstorm): 200-232 -> WMO 95-99
+  if (owmCode >= 200 && owmCode <= 232) {
+    if (owmCode >= 230) return 99; // Thunderstorm with heavy hail
+    if (owmCode >= 221) return 98; // Thunderstorm with hail
+    if (owmCode >= 212) return 97; // Heavy thunderstorm
+    return 95; // Thunderstorm
+  }
+  
+  // Морось (Drizzle): 300-321 -> WMO 51-55
+  if (owmCode >= 300 && owmCode <= 321) {
+    if (owmCode >= 320) return 55; // Heavy intensity drizzle
+    if (owmCode >= 314) return 54; // Dense intensity drizzle
+    if (owmCode >= 311) return 53; // Moderate intensity drizzle
+    if (owmCode >= 301) return 52; // Light intensity drizzle
+    return 51; // Drizzle
+  }
+  
+  // Дождь (Rain): 500-531 -> WMO 61-65
+  if (owmCode >= 500 && owmCode <= 531) {
+    if (owmCode >= 522) return 65; // Heavy intensity shower rain
+    if (owmCode >= 520) return 63; // Shower rain
+    if (owmCode >= 511) return 66; // Freezing rain
+    if (owmCode >= 502) return 64; // Heavy intensity rain
+    if (owmCode === 501) return 63; // Moderate rain
+    return 61; // Light rain
+  }
+  
+  // Снег (Snow): 600-622 -> WMO 71-77
+  if (owmCode >= 600 && owmCode <= 622) {
+    if (owmCode >= 621) return 77; // Heavy snow
+    if (owmCode >= 616) return 73; // Sleet
+    if (owmCode >= 612) return 72; // Light sleet
+    if (owmCode >= 611) return 71; // Sleet
+    if (owmCode >= 602) return 75; // Heavy snow
+    if (owmCode === 601) return 73; // Snow
+    return 71; // Light snow
+  }
+  
+  // Атмосферные явления (туман и т.д.): 701-781 -> WMO 45-48
+  if (owmCode >= 701 && owmCode <= 781) {
+    if (owmCode >= 771) return 99; // Squall
+    if (owmCode >= 762) return 48; // Volcanic ash
+    if (owmCode >= 761) return 48; // Sand/dust whirls
+    if (owmCode >= 751) return 48; // Sand
+    if (owmCode >= 741) return 45; // Fog
+    if (owmCode >= 731) return 48; // Sand/dust
+    return 45; // Mist
+  }
+  
+  // Ясно и облачность: 800-804 -> WMO 0-3
+  if (owmCode === 800) return 0; // Clear sky
+  if (owmCode === 801) return 1; // Few clouds
+  if (owmCode === 802) return 2; // Scattered clouds
+  if (owmCode === 803) return 2; // Broken clouds
+  if (owmCode === 804) return 3; // Overcast clouds
+  
+  // Если код не распознан, возвращаем 0 (ясно) как значение по умолчанию
+  console.warn(`Неизвестный код OpenWeatherMap: ${owmCode}, используем WMO 0 (ясно)`);
+  return 0;
 }
 
 /**
