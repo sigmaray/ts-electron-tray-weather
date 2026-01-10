@@ -1868,6 +1868,10 @@ async function showWeatherDetails(): Promise<void> {
         <div class="header">
           <h1>🌡️ Подробная информация о погоде</h1>
           <div class="location">📍 ${locationString}</div>
+          <div style="margin-top: 8px; font-size: 12px; color: #666;">
+            API: ${API_PROVIDER === 'openweathermap' ? 'OpenWeatherMap' : 'Open-Meteo'}
+            ${API_PROVIDER === 'openweathermap' && weatherData.cityId ? ` | <a href="https://openweathermap.org/city/${weatherData.cityId}" target="_blank" style="color: #1976d2; text-decoration: none;">Открыть на OpenWeatherMap</a>` : ''}
+          </div>
         </div>
         
         <div class="current-weather">
@@ -1988,6 +1992,18 @@ async function showWeatherDetails(): Promise<void> {
   // Очищаем ссылку при закрытии окна
   weatherWindow.on('closed', () => {
     weatherWindow = null;
+  });
+
+  // Обработка кликов по ссылкам через webContents
+  weatherWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  // Обработка навигации (если пользователь кликнет на ссылку)
+  weatherWindow.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault();
+    shell.openExternal(url);
   });
 
   weatherWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
@@ -2808,6 +2824,7 @@ interface ExtendedWeatherData {
   }>;
   timezone?: string;
   utc_offset_seconds?: number;
+  cityId?: number; // City ID для OpenWeatherMap (для ссылки)
 }
 
 async function fetchWeatherData(): Promise<WeatherData | null> {
@@ -2965,10 +2982,30 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
       const current = currentWeatherData;
       const currentMain = current.main || {};
       const currentWeather = current.weather && current.weather[0] ? current.weather[0] : {};
+      const currentSys = current.sys || {};
       
       // Конвертируем текущий код погоды из OpenWeatherMap в WMO
       const currentOwmCode = currentWeather.id || 800;
       const currentWmoCode = convertOpenWeatherMapToWMO(currentOwmCode);
+      
+      // Конвертируем sunrise и sunset из Unix timestamp в ISO строку
+      const sunrise = currentSys.sunrise ? new Date(currentSys.sunrise * 1000).toISOString() : undefined;
+      const sunset = currentSys.sunset ? new Date(currentSys.sunset * 1000).toISOString() : undefined;
+      
+      // Создаем daily массив с восходом и закатом для отображения
+      const dailyWithSun: Array<{ date: string; temperature_max: number; temperature_min: number; weathercode: number; sunrise?: string; sunset?: string }> = [];
+      if (sunrise || sunset) {
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        dailyWithSun.push({
+          date: todayStr,
+          temperature_max: currentMain.temp || 0,
+          temperature_min: currentMain.temp || 0,
+          weathercode: currentWmoCode,
+          sunrise: sunrise,
+          sunset: sunset,
+        });
+      }
       
       return {
         current: {
@@ -2986,10 +3023,11 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           uv_index: undefined, // OpenWeatherMap не предоставляет UV индекс в базовом API
           visibility: current.visibility ? current.visibility / 1000 : undefined, // Конвертируем из метров в километры
         },
-        daily: [], // Нет прогноза для OpenWeatherMap
+        daily: dailyWithSun, // Добавляем восход и закат для отображения
         hourly: [], // Нет прогноза для OpenWeatherMap
         timezone: current.timezone ? current.timezone : undefined,
         utc_offset_seconds: undefined,
+        cityId: current.id, // Сохраняем city ID для ссылки на OpenWeatherMap
       };
     }
     
@@ -3062,24 +3100,9 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         }
       }
       
-      // Получаем текущие значения из current (если доступны) или из hourly для текущего часа
+      // Получаем текущие значения ТОЛЬКО из current, НЕ используем данные из прогноза
       const currentData = data.current || {};
       const currentTime = data.current_weather?.time || new Date().toISOString();
-      
-      // Находим индекс текущего часа в hourly данных
-      let currentHourIndex = -1;
-      if (data.hourly && data.hourly.time) {
-        for (let i = 0; i < data.hourly.time.length; i++) {
-          const hourTime = new Date(data.hourly.time[i]);
-          const currentTimeObj = new Date(currentTime);
-          // Проверяем, попадает ли текущее время в этот час (с точностью до часа)
-          if (hourTime.getTime() <= currentTimeObj.getTime() && 
-              currentTimeObj.getTime() < hourTime.getTime() + 3600000) {
-            currentHourIndex = i;
-            break;
-          }
-        }
-      }
       
       return {
         current: {
@@ -3088,28 +3111,14 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           windspeed: data.current_weather.windspeed || 0,
           winddirection: data.current_weather.winddirection || 0,
           time: currentTime,
-          apparent_temperature: currentData.apparent_temperature || 
-                               (currentHourIndex >= 0 && data.hourly?.apparent_temperature ? 
-                                data.hourly.apparent_temperature[currentHourIndex] : undefined),
-          cloudcover: currentData.cloudcover || 
-                     (currentHourIndex >= 0 && data.hourly?.cloudcover ? 
-                      data.hourly.cloudcover[currentHourIndex] : undefined),
-          surface_pressure: currentData.surface_pressure || 
-                           (currentHourIndex >= 0 && data.hourly?.pressure_msl ? 
-                            data.hourly.pressure_msl[currentHourIndex] : undefined),
-          relativehumidity_2m: currentData.relativehumidity_2m || 
-                              (currentHourIndex >= 0 && data.hourly?.relativehumidity_2m ? 
-                               data.hourly.relativehumidity_2m[currentHourIndex] : undefined),
-          dewpoint_2m: currentData.dewpoint_2m || 
-                      (currentHourIndex >= 0 && data.hourly?.dewpoint_2m ? 
-                       data.hourly.dewpoint_2m[currentHourIndex] : undefined),
-          precipitation: currentData.precipitation || 
-                        (currentHourIndex >= 0 && data.hourly?.precipitation ? 
-                         data.hourly.precipitation[currentHourIndex] : undefined),
-          uv_index: currentData.uv_index || 
-                   (currentHourIndex >= 0 && data.hourly?.uv_index ? 
-                    data.hourly.uv_index[currentHourIndex] : undefined),
-          visibility: currentData.visibility || undefined,
+          apparent_temperature: currentData.apparent_temperature,
+          cloudcover: currentData.cloudcover,
+          surface_pressure: currentData.surface_pressure,
+          relativehumidity_2m: currentData.relativehumidity_2m,
+          dewpoint_2m: currentData.dewpoint_2m,
+          precipitation: currentData.precipitation,
+          uv_index: currentData.uv_index,
+          visibility: currentData.visibility,
         },
         daily: dailyForecast,
         hourly: hourlyForecast,
