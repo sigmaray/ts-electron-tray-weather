@@ -1873,7 +1873,7 @@ async function showWeatherDetails(): Promise<void> {
         <div class="current-weather">
           <div class="current-weather-content">
             <div>
-              <div class="current-temp">${Math.round(weatherData.current.temperature)}°</div>
+              <div class="current-temp">${weatherData.current.temperature}°</div>
               <div class="current-description">${getWeatherDescription(weatherData.current.weathercode)}</div>
             </div>
             <div class="current-emoji">${getWeatherEmoji(weatherData.current.weathercode)}</div>
@@ -1882,41 +1882,41 @@ async function showWeatherDetails(): Promise<void> {
             ${weatherData.current.apparent_temperature !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Ощущается как</div>
-              <div class="current-detail-value">${Math.round(weatherData.current.apparent_temperature)}°</div>
+              <div class="current-detail-value">${weatherData.current.apparent_temperature}°</div>
             </div>
             ` : ''}
             <div class="current-detail-item">
               <div class="current-detail-label">Ветер</div>
-              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${Math.round(weatherData.current.winddirection)}°, ${weatherData.current.windspeed.toFixed(1)} м/с ${getWindDescription(weatherData.current.windspeed)}</div>
+              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${weatherData.current.winddirection}°, ${weatherData.current.windspeed} м/с ${getWindDescription(weatherData.current.windspeed)}</div>
             </div>
             ${weatherData.current.cloudcover !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Облачность</div>
-              <div class="current-detail-value">${Math.round(weatherData.current.cloudcover)}% ${weatherData.current.cloudcover >= 75 ? "пасмурно" : weatherData.current.cloudcover >= 50 ? "облачно" : "малооблачно"}</div>
+              <div class="current-detail-value">${weatherData.current.cloudcover}% ${weatherData.current.cloudcover >= 75 ? "пасмурно" : weatherData.current.cloudcover >= 50 ? "облачно" : "малооблачно"}</div>
             </div>
             ` : ''}
             ${weatherData.current.surface_pressure !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Давление</div>
-              <div class="current-detail-value">${weatherData.current.surface_pressure.toFixed(1)} hPa</div>
+              <div class="current-detail-value">${weatherData.current.surface_pressure} hPa</div>
             </div>
             ` : ''}
             ${weatherData.current.relativehumidity_2m !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Влажность</div>
-              <div class="current-detail-value">${Math.round(weatherData.current.relativehumidity_2m)}%</div>
+              <div class="current-detail-value">${weatherData.current.relativehumidity_2m}%</div>
             </div>
             ` : ''}
             ${weatherData.current.visibility !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Видимость</div>
-              <div class="current-detail-value">${weatherData.current.visibility.toFixed(1)} км</div>
+              <div class="current-detail-value">${weatherData.current.visibility} км</div>
             </div>
             ` : ''}
             ${weatherData.current.dewpoint_2m !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Точка росы</div>
-              <div class="current-detail-value">${Math.round(weatherData.current.dewpoint_2m)}°</div>
+              <div class="current-detail-value">${weatherData.current.dewpoint_2m}°</div>
             </div>
             ` : ''}
             ${weatherData.current.dewpoint_2m !== undefined ? `
@@ -1928,7 +1928,7 @@ async function showWeatherDetails(): Promise<void> {
             ${weatherData.current.precipitation !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">Осадки</div>
-              <div class="current-detail-value">${weatherData.current.precipitation > 0 ? weatherData.current.precipitation.toFixed(1) + " мм" : "нет"}</div>
+              <div class="current-detail-value">${weatherData.current.precipitation > 0 ? weatherData.current.precipitation + " мм" : "нет"}</div>
             </div>
             ` : ''}
             ${weatherData.daily[0]?.sunrise ? `
@@ -1952,7 +1952,7 @@ async function showWeatherDetails(): Promise<void> {
             ${weatherData.current.uv_index !== undefined ? `
             <div class="current-detail-item">
               <div class="current-detail-label">УФ индекс</div>
-              <div class="current-detail-value">${weatherData.current.uv_index.toFixed(1)} ${getUVDescription(weatherData.current.uv_index)}</div>
+              <div class="current-detail-value">${weatherData.current.uv_index} ${getUVDescription(weatherData.current.uv_index)}</div>
             </div>
             ` : ''}
             <div class="current-detail-item">
@@ -2903,9 +2903,12 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
   
   // URL для получения расширенных данных в зависимости от API провайдера
   let extendedUrl: string;
+  let currentWeatherUrl: string | null = null;
   if (API_PROVIDER === 'openweathermap' && API_KEY) {
-    // OpenWeatherMap 5-day/3-hour forecast API
-    extendedUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
+    // Для OpenWeatherMap используем ТОЛЬКО текущую погоду (/data/2.5/weather)
+    // НЕ используем /forecast API
+    currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
+    extendedUrl = ""; // Не используется для OpenWeatherMap
   } else {
     // Open-Meteo API: расширенные данные с прогнозом на 7 дней и почасовым прогнозом на сегодня
     // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
@@ -2914,6 +2917,83 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
   
   const startTime = Date.now();
   try {
+    // Для OpenWeatherMap получаем только текущую погоду
+    let currentWeatherData: any = null;
+    if (API_PROVIDER === 'openweathermap' && currentWeatherUrl) {
+      try {
+        const currentStartTime = Date.now();
+        const currentRes = await fetch(currentWeatherUrl);
+        const currentDuration = Date.now() - currentStartTime;
+        
+        const currentText = await currentRes.text();
+        let currentResponseBody: string | undefined;
+        try {
+          const currentJsonData = JSON.parse(currentText);
+          currentResponseBody = JSON.stringify(currentJsonData, null, 2);
+        } catch {
+          currentResponseBody = currentText;
+        }
+        
+        const currentResponseHeaders: Record<string, string> = {};
+        currentRes.headers.forEach((value, key) => {
+          currentResponseHeaders[key] = value;
+        });
+        
+        if (currentRes.ok) {
+          currentWeatherData = JSON.parse(currentText);
+          addApiRequest("Weather API (текущая погода)", currentWeatherUrl, "GET", undefined, currentRes.status, currentResponseHeaders, currentResponseBody, currentDuration);
+        } else {
+          const error = new Error(`HTTP error ${currentRes.status} ${currentRes.statusText}`);
+          addApiError("Weather API (текущая погода)", error, currentWeatherUrl, { statusCode: currentRes.status });
+          addApiRequest("Weather API (текущая погода)", currentWeatherUrl, "GET", undefined, currentRes.status, currentResponseHeaders, currentResponseBody, currentDuration);
+          console.error("Не удалось получить текущую погоду от OpenWeatherMap");
+          return null;
+        }
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        addApiError("Weather API (текущая погода)", error, currentWeatherUrl);
+        console.error("Ошибка при получении текущей погоды от OpenWeatherMap:", err);
+        return null;
+      }
+      
+      // Для OpenWeatherMap возвращаем только текущие данные, без прогноза
+      if (!currentWeatherData) {
+        console.error("Не удалось получить текущую погоду от OpenWeatherMap /weather API");
+        return null;
+      }
+      
+      const current = currentWeatherData;
+      const currentMain = current.main || {};
+      const currentWeather = current.weather && current.weather[0] ? current.weather[0] : {};
+      
+      // Конвертируем текущий код погоды из OpenWeatherMap в WMO
+      const currentOwmCode = currentWeather.id || 800;
+      const currentWmoCode = convertOpenWeatherMapToWMO(currentOwmCode);
+      
+      return {
+        current: {
+          temperature: currentMain.temp || 0,
+          weathercode: currentWmoCode,
+          windspeed: current.wind ? (current.wind.speed || 0) : 0,
+          winddirection: current.wind ? (current.wind.deg || 0) : 0,
+          time: current.dt ? new Date(current.dt * 1000).toISOString() : new Date().toISOString(),
+          apparent_temperature: currentMain.feels_like,
+          cloudcover: current.clouds && typeof current.clouds.all === "number" ? current.clouds.all : undefined,
+          surface_pressure: currentMain.pressure ? currentMain.pressure : undefined, // OpenWeatherMap возвращает давление в hPa
+          relativehumidity_2m: currentMain.humidity,
+          dewpoint_2m: undefined, // OpenWeatherMap не предоставляет точку росы напрямую
+          precipitation: current.rain ? (current.rain['3h'] || 0) : undefined,
+          uv_index: undefined, // OpenWeatherMap не предоставляет UV индекс в базовом API
+          visibility: current.visibility ? current.visibility / 1000 : undefined, // Конвертируем из метров в километры
+        },
+        daily: [], // Нет прогноза для OpenWeatherMap
+        hourly: [], // Нет прогноза для OpenWeatherMap
+        timezone: current.timezone ? current.timezone : undefined,
+        utc_offset_seconds: undefined,
+      };
+    }
+    
+    // Для Open-Meteo делаем запрос к extendedUrl
     const res = await fetch(extendedUrl);
     const duration = Date.now() - startTime;
     
@@ -2944,95 +3024,7 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     
     const data: any = JSON.parse(responseText);
     
-    // Обрабатываем ответ в зависимости от API провайдера
-    if (API_PROVIDER === 'openweathermap') {
-      // OpenWeatherMap 5-day forecast API формат
-      // Для упрощения, используем текущую погоду и прогноз из списка
-      if (data && data.list && data.list.length > 0) {
-        const current = data.list[0];
-        const currentMain = current.main || {};
-        const currentWeather = current.weather && current.weather[0] ? current.weather[0] : {};
-        
-        // Формируем дневной прогноз (группируем по дням)
-        const dailyForecast: Array<{ date: string; temperature_max: number; temperature_min: number; weathercode: number; sunrise?: string; sunset?: string }> = [];
-        const dailyMap = new Map<string, { temps: number[]; weathercodes: number[] }>();
-        
-        data.list.forEach((item: any) => {
-          const date = new Date(item.dt * 1000);
-          const dateStr = date.toISOString().split('T')[0];
-          if (!dailyMap.has(dateStr)) {
-            dailyMap.set(dateStr, { temps: [], weathercodes: [] });
-          }
-          const dayData = dailyMap.get(dateStr)!;
-          dayData.temps.push(item.main.temp);
-          if (item.weather && item.weather[0]) {
-            dayData.weathercodes.push(item.weather[0].id);
-          }
-        });
-        
-        // Формируем прогноз на 7 дней
-        let dayCount = 0;
-        for (const [dateStr, dayData] of dailyMap.entries()) {
-          if (dayCount >= 7) break;
-          // Конвертируем код OpenWeatherMap в WMO для первого кода дня
-          const owmCode = dayData.weathercodes[0] || 800;
-          const wmoCode = convertOpenWeatherMapToWMO(owmCode);
-          dailyForecast.push({
-            date: dateStr,
-            temperature_max: Math.max(...dayData.temps),
-            temperature_min: Math.min(...dayData.temps),
-            weathercode: wmoCode,
-          });
-          dayCount++;
-        }
-        
-        // Формируем почасовой прогноз на сегодня
-        const hourlyForecast: Array<{ time: string; temperature: number; weathercode: number }> = [];
-        const now = new Date();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        data.list.forEach((item: any) => {
-          const itemTime = new Date(item.dt * 1000);
-          if (itemTime >= now && itemTime.getDate() === today.getDate()) {
-            const owmCode = item.weather && item.weather[0] ? item.weather[0].id : 800;
-            const wmoCode = convertOpenWeatherMapToWMO(owmCode);
-            hourlyForecast.push({
-              time: itemTime.toISOString(),
-              temperature: item.main.temp,
-              weathercode: wmoCode,
-            });
-          }
-        });
-        
-        // Конвертируем текущий код погоды из OpenWeatherMap в WMO
-        const currentOwmCode = currentWeather.id || 800;
-        const currentWmoCode = convertOpenWeatherMapToWMO(currentOwmCode);
-        
-        return {
-          current: {
-            temperature: currentMain.temp || 0,
-            weathercode: currentWmoCode,
-            windspeed: current.wind ? (current.wind.speed || 0) : 0,
-            winddirection: current.wind ? (current.wind.deg || 0) : 0,
-            time: new Date(current.dt * 1000).toISOString(),
-            apparent_temperature: currentMain.feels_like,
-            cloudcover: current.clouds ? current.clouds : undefined,
-            surface_pressure: currentMain.pressure ? currentMain.pressure * 100 : undefined, // Конвертируем из hPa в Pa
-            relativehumidity_2m: currentMain.humidity,
-            dewpoint_2m: undefined, // OpenWeatherMap не предоставляет точку росы напрямую
-            precipitation: current.rain ? (current.rain['3h'] || 0) : undefined,
-            uv_index: undefined, // OpenWeatherMap не предоставляет UV индекс в базовом API
-            visibility: current.visibility ? current.visibility / 1000 : undefined, // Конвертируем из метров в километры
-          },
-          daily: dailyForecast,
-          hourly: hourlyForecast,
-          timezone: data.city ? data.city.timezone : undefined,
-          utc_offset_seconds: undefined,
-        };
-      }
-      return null;
-    }
+    // Обрабатываем ответ Open-Meteo API
     
     // Open-Meteo API формат
     if (data && data.current_weather && data.daily) {
@@ -3492,14 +3484,16 @@ async function updateTrayTemperature() {
   const weatherData = await fetchWeatherData();
   const temp = weatherData?.temperature ?? null;
   const weathercode = weatherData?.weathercode ?? 0;
-  const label = temp !== null ? `${temp.toFixed(1)} °C` : "N/A";
-
+  
+  // Полная температура без округления для tooltip, меню и окна подробной информации
+  const fullLabel = temp !== null ? `${temp} °C` : "N/A";
+  
   // Обновляем время последнего успешного обновления, если температура получена успешно
   if (temp !== null) {
     lastUpdateTime = new Date();
   }
 
-  // Короткая надпись для самой иконки (чтобы влезала в небольшой размер)
+  // Короткая надпись для самой иконки (чтобы влезала в небольшой размер) - с округлением
   const shortLabel =
     temp !== null ? `${Math.round(temp)}°` : "NA";
 
@@ -3520,24 +3514,24 @@ async function updateTrayTemperature() {
     timeString = ` (обновлено: ${hours}:${minutes}:${seconds})`;
   }
 
-  // Tooltip при наведении для обеих иконок (одинаковый текст)
+  // Tooltip при наведении для обеих иконок (одинаковый текст) - полные данные без округления
   const locationString = cityName && countryName ? `${cityName}, ${countryName}\n` : "";
   const weatherDescription = getWeatherDescription(weathercode);
-  const tooltipText = `${locationString}Температура: ${label}\nПогода: ${weatherDescription}${timeString}`;
+  const tooltipText = `${locationString}Температура: ${fullLabel}\nПогода: ${weatherDescription}${timeString}`;
   tray.setToolTip(tooltipText);
   weatherTray.setToolTip(tooltipText);
 
   // Попытка отобразить текст прямо в трее (полноценно работает в macOS).
   try {
-    tray.setTitle(label);
+    tray.setTitle(fullLabel);
   } catch {
     // На Linux/Windows может быть проигнорировано.
   }
 
-  // Формируем пункты меню для первой иконки (температура)
+  // Формируем пункты меню для первой иконки (температура) - полные данные без округления
   const menuItems: any[] = [
     {
-      label: `Текущая температура: ${label}`,
+      label: `Текущая температура: ${fullLabel}`,
       enabled: false,
     },
     {
@@ -3649,7 +3643,7 @@ async function updateTrayTemperature() {
       enabled: false,
     },
     {
-      label: `Текущая температура: ${label}`,
+      label: `Текущая температура: ${fullLabel}`,
       enabled: false,
     },
     { type: "separator" },
