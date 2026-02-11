@@ -8,6 +8,9 @@ const isMac = os.platform() === "darwin";
 const isWindows = os.platform() === "win32";
 const isLinux = os.platform() === "linux";
 
+// Константа для управления разрешением только одного экземпляра приложения
+const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
+
 // Интерфейс для настроек
 interface Settings {
   city?: string;
@@ -3790,12 +3793,44 @@ app.on("window-all-closed", () => {
   // app.quit() будет вызван только явно через меню "Выйти"
 });
 
-app.whenReady().then(async () => {
-  // Инициализируем кэш цветных emoji перед созданием трея
-  await initializeEmojiCache();
-  // Отключаем создание окна — нам нужен только трей.
-  await createTray();
-});
+// Обеспечиваем, что только один экземпляр приложения может быть запущен (если включено)
+if (ALLOW_ONLY_ONE_INSTANCE) {
+  const gotTheLock = app.requestSingleInstanceLock();
+
+  if (!gotTheLock) {
+    // Если другой экземпляр уже запущен, закрываем этот
+    app.quit();
+  } else {
+    // Обрабатываем попытку запуска второго экземпляра
+    app.on('second-instance', () => {
+      // Если пользователь пытается запустить второй экземпляр, показываем существующие окна
+      const windows = [settingsWindow, weatherWindow, requestWindow, errorWindow, helpWindow];
+      for (const window of windows) {
+        if (window && !window.isDestroyed()) {
+          if (window.isMinimized()) window.restore();
+          window.show();
+          window.focus();
+          break; // Показываем только первое доступное окно
+        }
+      }
+    });
+
+    app.whenReady().then(async () => {
+      // Инициализируем кэш цветных emoji перед созданием трея
+      await initializeEmojiCache();
+      // Отключаем создание окна — нам нужен только трей.
+      await createTray();
+    });
+  }
+} else {
+  // Если разрешено несколько экземпляров, запускаем приложение без проверки блокировки
+  app.whenReady().then(async () => {
+    // Инициализируем кэш цветных emoji перед созданием трея
+    await initializeEmojiCache();
+    // Отключаем создание окна — нам нужен только трей.
+    await createTray();
+  });
+}
 
 app.on("before-quit", () => {
   if (updateInterval) {

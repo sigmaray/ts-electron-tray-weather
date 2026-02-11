@@ -6,6 +6,7 @@
   "scripts": {
     "start": "npm run build && electron --no-sandbox .",
     "dev": "npm run build && electron --no-sandbox .",
+    "devm": "npm run build && ALLOW_ONLY_ONE_INSTANCE=false electron --no-sandbox .",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "build:electron": "electron-builder --publish never",
