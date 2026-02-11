@@ -1873,7 +1873,7 @@ async function showWeatherDetails(): Promise<void> {
           <div class="location">📍 ${locationString}</div>
           <div style="margin-top: 8px; font-size: 12px; color: #666;">
             API: ${API_PROVIDER === 'openweathermap' ? 'OpenWeatherMap' : 'Open-Meteo'}
-            ${API_PROVIDER === 'openweathermap' && weatherData.cityId ? ` | <a href="https://openweathermap.org/city/${weatherData.cityId}" target="_blank" style="color: #1976d2; text-decoration: none;">Открыть на OpenWeatherMap</a>` : ''}
+            ${API_PROVIDER === 'openweathermap' && weatherData.cityId ? ` | <a href="https://old.openweathermap.org/city/${weatherData.cityId}" target="_blank" style="color: #1976d2; text-decoration: none;">Открыть на OpenWeatherMap</a>` : ''}
           </div>
         </div>
         
