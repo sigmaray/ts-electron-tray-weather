@@ -1605,16 +1605,32 @@ async function showWeatherDetails(): Promise<void> {
   const formatTime = (timeStr: string): string => {
     // Показываем время в том же формате, в котором оно пришло от API
     // Добавляем информацию о таймзоне и UTC offset
-    if (weatherData.timezone) {
-      const timezone = weatherData.timezone;
+    if (weatherData.timezone !== undefined) {
+      // Для OpenWeatherMap timezone - это число (offset в секундах)
+      // Для Open-Meteo timezone - это строка (название таймзоны)
+      let timezoneDisplay = "";
       let utcOffset = "";
-      if (weatherData.utc_offset_seconds !== undefined) {
-        const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
-        const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
-        const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
+      
+      if (typeof weatherData.timezone === "number") {
+        // OpenWeatherMap: timezone - это offset в секундах
+        const offsetSeconds = weatherData.timezone;
+        const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
+        const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
+        const sign = offsetSeconds >= 0 ? "+" : "-";
         utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+        timezoneDisplay = utcOffset;
+      } else if (typeof weatherData.timezone === "string") {
+        // Open-Meteo: timezone - это название таймзоны
+        timezoneDisplay = weatherData.timezone;
+        if (weatherData.utc_offset_seconds !== undefined) {
+          const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
+          const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
+          const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
+          utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+        }
       }
-      return `${timeStr} (${timezone}${utcOffset ? `, ${utcOffset}` : ""})`;
+      
+      return `${timeStr} (${timezoneDisplay}${utcOffset && typeof weatherData.timezone === "string" ? `, ${utcOffset}` : ""})`;
     }
     
     return timeStr;
@@ -1634,16 +1650,32 @@ async function showWeatherDetails(): Promise<void> {
   
   // Форматируем информацию о часовом поясе и UTC offset
   let timezoneInfo = "";
-  if (weatherData.timezone) {
-    const timezone = weatherData.timezone;
+  if (weatherData.timezone !== undefined) {
+    // Для OpenWeatherMap timezone - это число (offset в секундах)
+    // Для Open-Meteo timezone - это строка (название таймзоны)
+    let timezoneDisplay = "";
     let utcOffset = "";
-    if (weatherData.utc_offset_seconds !== undefined) {
-      const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
-      const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
-      const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
+    
+    if (typeof weatherData.timezone === "number") {
+      // OpenWeatherMap: timezone - это offset в секундах
+      const offsetSeconds = weatherData.timezone;
+      const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
+      const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
+      const sign = offsetSeconds >= 0 ? "+" : "-";
       utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+      timezoneDisplay = utcOffset;
+    } else if (typeof weatherData.timezone === "string") {
+      // Open-Meteo: timezone - это название таймзоны
+      timezoneDisplay = weatherData.timezone;
+      if (weatherData.utc_offset_seconds !== undefined) {
+        const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
+        const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
+        const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
+        utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+      }
     }
-    timezoneInfo = ` (${timezone}${utcOffset ? `, ${utcOffset}` : ""})`;
+    
+    timezoneInfo = ` (${timezoneDisplay}${utcOffset && typeof weatherData.timezone === "string" ? `, ${utcOffset}` : ""})`;
   }
 
 
@@ -2379,7 +2411,7 @@ function showApiErrors(): void {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>История ошибок API (${apiErrors.length} из ${MAX_ERRORS})</title>
+      <title>История ошибок API (${apiErrors.length} из ${MAX_ERRORS} максимально хранящихся)</title>
       <style>
         * {
           margin: 0;
@@ -2514,7 +2546,7 @@ function showApiErrors(): void {
     </head>
     <body>
       <div class="header">
-        <h1>История ошибок API (${apiErrors.length} из ${MAX_ERRORS})</h1>
+        <h1>История ошибок API (${apiErrors.length} из ${MAX_ERRORS} максимально хранящихся)</h1>
       </div>
       <div class="error-list">
         ${errorsHtml}
@@ -2825,7 +2857,7 @@ interface ExtendedWeatherData {
     temperature: number;
     weathercode: number;
   }>;
-  timezone?: string;
+  timezone?: string | number; // Для OpenWeatherMap - число (offset в секундах), для Open-Meteo - строка (название таймзоны)
   utc_offset_seconds?: number;
   cityId?: number; // City ID для OpenWeatherMap (для ссылки)
 }
