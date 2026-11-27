@@ -87,11 +87,11 @@ npm start
 
 Settings are stored in `settings.json` in the project root. The file is created automatically with default values on first launch.
 
-> **⚠️ Important:** By default, the app shows the weather for **New York City, United States**. To show the weather for your location, update the settings in the **Settings** dialog or edit `settings.json` manually.
+> **⚠️ Important:** By default, the app shows the weather for **New York City, United States**. To show the weather for your location, update the settings in the **Settings** dialog.
 
 ### ⚙️ Settings dialog (recommended)
 
-You can use the settings dialog instead of editing `settings.json` manually:
+Use the settings dialog to configure your location and weather provider:
 
 1. Right-click the tray icon.
 2. Select **Settings**.
@@ -100,49 +100,20 @@ You can use the settings dialog instead of editing `settings.json` manually:
 
 The dialog validates the values and applies the settings. The app continues running with the new settings; no restart is required.
 
-### 📝 Edit settings.json manually
+### Choose a weather provider
 
-Alternatively, edit `settings.json` and provide one of the following configurations.
+OpenWeatherMap provides more accurate weather data. It requires an API key, while Open-Meteo can be used without one.
 
-#### Option 1: Specify a city and country
+To use OpenWeatherMap:
 
-```json
-{
-  "city": "New York City",
-  "country": "United States",
-  "latitude": null,
-  "longitude": null,
-  "updateIntervalInSeconds": 60
-}
-```
-
-Coordinates are looked up automatically through the Geocoding API.
-
-#### Option 2: Specify coordinates directly
-
-```json
-{
-  "city": null,
-  "country": null,
-  "latitude": 40.71427,
-  "longitude": -74.00597,
-  "updateIntervalInSeconds": 60
-}
-```
-
-The city and country names are looked up automatically from the coordinates.
+1. Open **Settings** from the tray icon's context menu.
+2. Choose **OpenWeatherMap** in the **API provider** list. The API key field will appear.
+3. Enter your OpenWeatherMap API key. If you don't have one, use the **Get an API key** link shown below the field.
+4. Click **Save**. The app validates and applies the key immediately.
 
 ### Set the update interval
 
-`updateIntervalInSeconds` sets how often the temperature refreshes, in seconds. The default is `60` (one minute).
-
-For example, to refresh every 30 seconds:
-
-```json
-{
-  "updateIntervalInSeconds": 30
-}
-```
+Set **Update interval (seconds)** in the Settings dialog. The default is `60` (one minute).
 
 ## Displayed information
 
