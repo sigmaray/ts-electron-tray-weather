@@ -1,59 +1,58 @@
-# Playwright тесты для Electron Weather App
+# Playwright tests for Electron Weather App
 
-Этот каталог содержит Playwright тесты для проверки работы Electron приложения Weather App.
+This directory contains Playwright tests for the Electron Weather App.
 
-## Структура тестов
+## Test structure
 
-- `helpers.ts` - Вспомогательные функции для работы с Electron
-- `app.test.ts` - Базовые тесты запуска приложения
-- `settings-window.test.ts` - Тесты окна настроек
-- `weather-data.test.ts` - Тесты получения и отображения данных о погоде
-- `help-window.test.ts` - Тесты окна справки
-- `data-display.test.ts` - Тесты корректности отображения данных
+- `helpers.ts` — helper functions for working with Electron
+- `app.test.ts` — basic application startup tests
+- `settings-window.test.ts` — settings window tests
+- `weather-data.test.ts` — weather data retrieval and display tests
+- `help-window.test.ts` — help window tests
+- `data-display.test.ts` — data display checks
 
-## Запуск тестов
+## Run the tests
 
 ```bash
-# Установить зависимости (если еще не установлены)
+# Install dependencies (if they are not already installed)
 npm install
 
-# Скомпилировать приложение
+# Compile the app
 npm run build
 
-# Запустить все тесты
+# Run all tests
 npm test
 
-# Запустить тесты в UI режиме
+# Run tests in UI mode
 npm run test:ui
 
-# Запустить тесты в headed режиме (с видимым браузером)
+# Run tests in headed mode (with a visible browser)
 npm run test:headed
 
-# Запустить конкретный тест
+# Run a specific test
 npm test -- tests/app.test.ts
 ```
 
-## Что тестируется
+## What is tested
 
-### Базовые функции
-- ✅ Запуск приложения без ошибок
-- ✅ Инициализация приложения
-- ✅ Работа процесса приложения
+### Basic functionality
+- ✅ App starts without errors
+- ✅ App initialization
+- ✅ App process stays running
 
-### Окна приложения
-- ✅ Окно настроек (открытие, поля формы)
-- ✅ Окно справки (содержимое)
-- ✅ Окно с подробной информацией о погоде
+### App windows
+- ✅ Settings window (opening and form fields)
+- ✅ Help window (content)
+- ✅ Detailed weather information window
 
-### Отображение данных
-- ✅ Корректное отображение температуры
-- ✅ Отображение информации о местоположении
-- ✅ Работа с настройками (координаты, город/страна)
-- ✅ Валидация формы настроек
+### Data display
+- ✅ Temperature is displayed correctly
+- ✅ Location information is displayed
+- ✅ Settings work with coordinates or a city and country
+- ✅ Settings form validation
 
-## Примечания
+## Notes
 
-- Тесты используют временный файл `settings.test.json` для изоляции тестовых данных
-- Некоторые тесты могут требовать GUI окружение для полной функциональности
-- Тесты автоматически очищают временные файлы после выполнения
-
+- Tests use a temporary `settings.test.json` file to isolate test data.
+- Some tests may require a GUI environment for full functionality.
+- Tests automatically remove temporary files after running.

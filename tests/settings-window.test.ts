@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings } from './helpers';
 
-test.describe('Тесты окна настроек', () => {
+test.describe('Settings window tests', () => {
   let electronApp: any;
 
   test.beforeEach(async () => {
@@ -19,23 +19,23 @@ test.describe('Тесты окна настроек', () => {
       try {
         await electronApp.close();
       } catch (e) {
-        // Игнорируем ошибки
+        // Ignore errors
       }
     }
     removeTestSettings();
   });
 
-  test('должен открывать окно настроек с правильными полями', async () => {
+  test('should open the settings window with the expected fields', async () => {
     electronApp = await launchElectronApp();
     
-    // Ждем инициализации приложения
+    // Wait for app initialization
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Ищем окно настроек
-    const settingsWindow = await waitForWindow(electronApp, 'Настройки', 5000);
+    // Look for the settings window
+    const settingsWindow = await waitForWindow(electronApp, 'Settings', 5000);
     
     if (settingsWindow) {
-      // Проверяем наличие основных полей формы
+      // Check that the main form fields are present
       const cityInput = settingsWindow.locator('#city');
       const countryInput = settingsWindow.locator('#country');
       const latitudeInput = settingsWindow.locator('#latitude');
@@ -48,38 +48,38 @@ test.describe('Тесты окна настроек', () => {
       await expect(longitudeInput).toBeVisible();
       await expect(updateIntervalInput).toBeVisible();
       
-      // Проверяем, что поля заполнены текущими значениями
+      // Check that the fields contain the current values
       const cityValue = await cityInput.inputValue();
       expect(cityValue).toBe('Moscow');
       
       const countryValue = await countryInput.inputValue();
       expect(countryValue).toBe('Russia');
     } else {
-      // Если окно не открылось автоматически, это нормально для приложения в трее
-      // Проверяем, что приложение запустилось
+      // If the window did not open automatically, this is expected for a tray app
+      // Check that the app has started
       expect(electronApp).toBeDefined();
     }
   });
 
-  test('должен валидировать форму настроек', async () => {
+  test('should validate the settings form', async () => {
     electronApp = await launchElectronApp();
     
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    const settingsWindow = await waitForWindow(electronApp, 'Настройки', 5000);
+    const settingsWindow = await waitForWindow(electronApp, 'Settings', 5000);
     
     if (settingsWindow) {
-      // Очищаем поля
+      // Clear the fields
       await settingsWindow.fill('#city', '');
       await settingsWindow.fill('#country', '');
       await settingsWindow.fill('#latitude', '');
       await settingsWindow.fill('#longitude', '');
       
-      // Пытаемся сохранить пустую форму
+      // Try to save the empty form
       const saveButton = settingsWindow.locator('#saveBtn');
       await saveButton.click();
       
-      // Должны появиться ошибки валидации
+      // Validation errors should appear
       const validationErrors = settingsWindow.locator('#validationErrors');
       await expect(validationErrors).toBeVisible({ timeout: 2000 });
     }

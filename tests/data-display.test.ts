@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings } from './helpers';
 
-test.describe('Тесты отображения данных', () => {
+test.describe('Data display tests', () => {
   let electronApp: any;
 
   test.beforeEach(async () => {
-    // Используем координаты Москвы для стабильных тестов
+    // Use Moscow coordinates for stable tests
     createTestSettings({
       city: null,
       country: null,
@@ -20,56 +20,56 @@ test.describe('Тесты отображения данных', () => {
       try {
         await electronApp.close();
       } catch (e) {
-        // Игнорируем ошибки
+        // Ignore errors
       }
     }
     removeTestSettings();
   });
 
-  test('должен корректно отображать данные о погоде в окне', async () => {
+  test('should display weather data correctly in the window', async () => {
     electronApp = await launchElectronApp();
     
-    // Ждем инициализации и получения данных
+    // Wait for initialization and data retrieval
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // Ищем окно с подробной информацией о погоде
-    const weatherWindow = await waitForWindow(electronApp, 'Подробная информация о погоде', 10000);
+    // Look for the detailed weather information window
+    const weatherWindow = await waitForWindow(electronApp, 'Detailed weather information', 10000);
     
     if (weatherWindow) {
-      // Проверяем наличие основных элементов
+      // Check that the main elements are present
       const content = await weatherWindow.content();
       
-      // Проверяем, что отображается температура (должна быть числом)
+      // Check that the temperature is displayed (it should be numeric)
       const tempMatch = content.match(/[\d.-]+\s*°C/);
       expect(tempMatch).toBeTruthy();
       
-      // Проверяем наличие информации о местоположении
-      expect(content).toMatch(/📍|Москва|Moscow/i);
+      // Check that location information is present
+      expect(content).toMatch(/📍|Moscow|Moscow/i);
       
-      // Проверяем наличие описания погоды
-      expect(content.length).toBeGreaterThan(100); // Окно должно содержать достаточно контента
+      // Check that a weather description is present
+      expect(content.length).toBeGreaterThan(100); // The window should contain enough content
     } else {
-      // Если окно не открылось, проверяем что приложение работает
+      // If the window did not open, check that the app is running
       expect(electronApp).toBeDefined();
     }
   });
 
-  test('должен отображать правильные координаты в настройках', async () => {
+  test('should display the correct coordinates in settings', async () => {
     electronApp = await launchElectronApp();
     
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    const settingsWindow = await waitForWindow(electronApp, 'Настройки', 5000);
+    const settingsWindow = await waitForWindow(electronApp, 'Settings', 5000);
     
     if (settingsWindow) {
-      // Проверяем, что координаты отображаются
+      // Check that the coordinates are displayed
       const latitudeInput = settingsWindow.locator('#latitude');
       const longitudeInput = settingsWindow.locator('#longitude');
       
       const latValue = await latitudeInput.inputValue();
       const lonValue = await longitudeInput.inputValue();
       
-      // Координаты должны быть близки к заданным (с учетом округления)
+      // Coordinates should be close to the configured values (allowing for rounding)
       if (latValue) {
         const lat = parseFloat(latValue);
         expect(lat).toBeCloseTo(55.7558, 1);
@@ -82,8 +82,8 @@ test.describe('Тесты отображения данных', () => {
     }
   });
 
-  test('должен корректно работать с настройками города и страны', async () => {
-    // Используем настройки с городом и страной
+  test('should work correctly with city and country settings', async () => {
+    // Use city and country settings
     createTestSettings({
       city: 'Moscow',
       country: 'Russia',
@@ -96,7 +96,7 @@ test.describe('Тесты отображения данных', () => {
     
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    const settingsWindow = await waitForWindow(electronApp, 'Настройки', 5000);
+    const settingsWindow = await waitForWindow(electronApp, 'Settings', 5000);
     
     if (settingsWindow) {
       const cityInput = settingsWindow.locator('#city');

@@ -1,15 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings } from './helpers';
 
-test.describe('Тесты отображения данных о погоде', () => {
+test.describe('Weather data display tests', () => {
   let electronApp: any;
 
   test.beforeEach(async () => {
-    // Используем известные координаты для стабильных тестов
+    // Use known coordinates for stable tests
     createTestSettings({
       city: null,
       country: null,
-      latitude: 55.7558, // Москва
+      latitude: 55.7558, // Moscow
       longitude: 37.6173,
       updateIntervalInSeconds: 60,
     });
@@ -20,53 +20,53 @@ test.describe('Тесты отображения данных о погоде', 
       try {
         await electronApp.close();
       } catch (e) {
-        // Игнорируем ошибки
+        // Ignore errors
       }
     }
     removeTestSettings();
   });
 
-  test('должен получать и отображать данные о погоде', async () => {
+  test('should retrieve and display weather data', async () => {
     electronApp = await launchElectronApp();
     
-    // Ждем инициализации и получения данных о погоде
+    // Wait for initialization and weather data retrieval
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // Проверяем, что приложение запустилось и работает
+    // Check that the app has started and is running
     expect(electronApp).toBeDefined();
     
-    // Проверяем, что процесс работает
+    // Check that the process is running
     try {
       const process = electronApp.process();
       const isRunning = process && !process.killed;
       expect(isRunning).toBe(true);
     } catch (e) {
-      // Если не можем проверить процесс, просто проверяем что приложение определено
+      // If the process cannot be checked, just verify that the app is defined
       expect(electronApp).toBeDefined();
     }
   });
 
-  test('должен открывать окно с подробной информацией о погоде', async () => {
+  test('should open the detailed weather information window', async () => {
     electronApp = await launchElectronApp();
     
-    // Ждем инициализации
+    // Wait for initialization
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // Ищем окно с подробной информацией о погоде
-    const weatherWindow = await waitForWindow(electronApp, 'Подробная информация о погоде', 5000);
+    // Look for the detailed weather information window
+    const weatherWindow = await waitForWindow(electronApp, 'Detailed weather information', 5000);
     
     if (weatherWindow) {
-      // Проверяем наличие основных элементов
+      // Check that the main elements are present
       const content = await weatherWindow.content();
       
-      // Проверяем, что в окне есть информация о температуре
-      expect(content).toContain('Температура');
+      // Check that the window contains temperature information
+      expect(content).toContain('Temperature');
       
-      // Проверяем наличие информации о местоположении
+      // Check that location information is present
       expect(content).toContain('📍');
     } else {
-      // Окно может не открываться автоматически, это нормально
-      // Проверяем, что приложение работает
+      // The window may not open automatically; this is expected
+      // Check that the app is running
       expect(electronApp).toBeDefined();
     }
   });

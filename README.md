@@ -1,39 +1,39 @@
 # Electron Tray Weather App (TypeScript)
 
-Простое приложение на **Electron + TypeScript**, которое показывает текущую температуру в **иконке в системном трее** и обновляет её **раз в минуту**.
+A simple **Electron + TypeScript** app that displays the current temperature in the **system tray icon** and refreshes it **once a minute**.
 
-Используется бесплатное API `open-meteo.com` (без ключа).
+It uses the free `open-meteo.com` API (no API key required).
 
-Сгенерировано в Cursor. Код нужно выверить и отрефакторить (не было времени это сделать), но вроде всё работает как надо.
+Generated in Cursor. The code still needs review and refactoring, but it appears to work as expected.
 
-## Возможности
+## Features
 
-- 🌡️ **Температура в иконке трея** — отображается прямо на иконке в виде текста
-- 🔄 **Автоматическое обновление** — температура обновляется каждую минуту
-- 📍 **Гибкая настройка местоположения** — можно указать либо координаты, либо город и страну
-- 🕐 **Время последнего обновления** — показывается в tooltip и меню
-- 📊 **Информация о местоположении** — координаты, город и страна в контекстном меню
-- 🐛 **История ошибок API** — сохраняются последние 20 ошибок для отладки
+- 🌡️ **Temperature in the tray icon** — displayed as text directly on the icon
+- 🔄 **Automatic updates** — the temperature refreshes every minute
+- 📍 **Flexible location settings** — specify coordinates or a city and country
+- 🕐 **Last update time** — shown in the tooltip and menu
+- 📊 **Location details** — coordinates, city, and country in the context menu
+- 🐛 **API error history** — the latest 20 errors are saved for debugging
 
-## Как запустить
+## Getting started
 
-Открыть раздел "Releases" в гитхаб-репозитории. Открыть последний релиз. Скачать архив, соответсвующий используемой операционной системе, разархивировать, запустить.
+Open the **Releases** section of the GitHub repository, select the latest release, download the archive for your operating system, extract it, and run the app.
 
 ### Linux
 
-Скачать `electron-tray-weather-1.0.0.zip`, разархивировать, запустить (`ELECTRON_DISABLE_SANDBOX=1 ./electron-tray-weather`)
+Download `electron-tray-weather-1.0.0.zip`, extract it, and run `ELECTRON_DISABLE_SANDBOX=1 ./electron-tray-weather`.
 
 ### Windows
 
-Скачать `Tray.Weather-1.0.0-win.zip`, разархивировать, запустить exe-файл ("Tray Weather.exe")
+Download and extract `Tray.Weather-1.0.0-win.zip`, then run `Tray Weather.exe`.
 
-Windows может ругнуться на запуск программы из непроверенного источника
+Windows may warn you about running an app from an unverified source.
 
 <img width="543" height="511" alt="image" src="https://github.com/user-attachments/assets/38307104-44eb-4c69-9c04-3b2c6dc8bd59" />
 
 <img width="550" height="513" alt="image" src="https://github.com/user-attachments/assets/8d45a49a-f903-4c33-9de8-415e459fd419" />
 
-В Windows может быть необходимо включить скрытую иконку
+You may need to enable the hidden icon in Windows.
 
 <img width="347" height="183" alt="image" src="https://github.com/user-attachments/assets/68d214cb-0987-4f60-9202-3e05355643dd" />
 
@@ -43,69 +43,68 @@ Windows может ругнуться на запуск программы из 
 
 ### macOS
 
-Использовать архив `Tray.Weather-1.0.0-mac.zip`
+Use the `Tray.Weather-1.0.0-mac.zip` archive.
 
-## Как работает приложение
+## How the app works
 
-После запуска приложения **не открывается окно** — приложение работает в фоновом режиме. В системном трее (область уведомлений) появляется **иконка с текущей температурой**.
+The app runs in the background without opening a window. A **tray icon showing the current temperature** appears in the system notification area.
 
-**Всё взаимодействие с приложением происходит через контекстное меню:**
-- Кликните **правой кнопкой мыши** по иконке в трее
-- Откроется контекстное меню с различными опциями:
-  - Просмотр текущей температуры и информации о местоположении
-  - Обновление температуры вручную
-  - Открытие диалога "Настройки"
-  - Просмотр справки "Как пользоваться"
-  - Просмотр истории ошибок API
-  - Выход из приложения
+**Interact with the app through the context menu:**
 
-## Установка
+- Right-click the tray icon
+- Choose an option from the context menu:
+  - View the current temperature and location details
+  - Refresh the temperature manually
+  - Open **Settings**
+  - View **How to use** help
+  - View API error history
+  - Quit the app
+
+## Installation
 
 ```bash
 npm install
 ```
 
-При первом запуске автоматически создастся файл `settings.json` с дефолтными настройками.
+On first launch, a `settings.json` file is created with default settings.
 
-## Запуск через npm
+## Run with npm
 
-### Режим разработки
+### Development mode
 
 ```bash
 npm run dev
 ```
 
-### Сборка и запуск
+### Build and run
 
 ```bash
 npm run build
 npm start
 ```
 
-## Настройка местоположения
+## Set the location
 
-Настройки хранятся в файле `settings.json` в корне проекта. При первом запуске файл создаётся автоматически с дефолтными значениями.
+Settings are stored in `settings.json` in the project root. The file is created automatically with default values on first launch.
 
-> **⚠️ Важно:** По умолчанию температура показывается для **New York City, United States**. Чтобы показывалась температура для вашей актуальной локации, необходимо изменить настройки через диалог "Настройки" или отредактировать файл `settings.json` вручную.
+> **⚠️ Important:** By default, the app shows the weather for **New York City, United States**. To show the weather for your location, update the settings in the **Settings** dialog or edit `settings.json` manually.
 
-### ⚙️ Диалог "Настройки" (рекомендуется)
+### ⚙️ Settings dialog (recommended)
 
-Вместо ручного редактирования файла `settings.json` можно использовать удобный диалог настроек:
+You can use the settings dialog instead of editing `settings.json` manually:
 
-1. Кликните правой кнопкой мыши на иконку в трее
-2. Выберите пункт **"Настройки"**
-3. В открывшемся окне заполните необходимые поля
-4. Нажмите кнопку **"Сохранить"**
+1. Right-click the tray icon.
+2. Select **Settings**.
+3. Fill in the required fields in the window that opens.
+4. Click **Save**.
 
-Диалог автоматически проверит корректность введённых данных и применит настройки. Приложение продолжит работать с новыми настройками без перезапуска.
+The dialog validates the values and applies the settings. The app continues running with the new settings; no restart is required.
 
-### 📝 Ручное редактирование файла settings.json
+### 📝 Edit settings.json manually
 
-Альтернативный способ — отредактировать файл `settings.json` вручную. Необходимо указать один из вариантов:
+Alternatively, edit `settings.json` and provide one of the following configurations.
 
-#### Вариант 1: Указать город и страну
-
-Отредактируйте файл `settings.json`:
+#### Option 1: Specify a city and country
 
 ```json
 {
@@ -117,11 +116,9 @@ npm start
 }
 ```
 
-Координаты будут определены автоматически через Geocoding API.
+Coordinates are looked up automatically through the Geocoding API.
 
-#### Вариант 2: Указать координаты напрямую
-
-Отредактируйте файл `settings.json`:
+#### Option 2: Specify coordinates directly
 
 ```json
 {
@@ -133,13 +130,13 @@ npm start
 }
 ```
 
-Название города и страны будут определены автоматически по координатам.
+The city and country names are looked up automatically from the coordinates.
 
-### Настройка интервала обновления
+### Set the update interval
 
-Поле `updateIntervalInSeconds` определяет, как часто обновляется температура (в секундах). Значение по умолчанию: `60` (1 минута).
+`updateIntervalInSeconds` sets how often the temperature refreshes, in seconds. The default is `60` (one minute).
 
-Пример для обновления каждые 30 секунд:
+For example, to refresh every 30 seconds:
 
 ```json
 {
@@ -147,75 +144,77 @@ npm start
 }
 ```
 
-## Отображение информации
+## Displayed information
 
-### Иконка в трее
+### Tray icon
 
-- Температура отображается **прямо на иконке** в виде текста (например, `5°`, `-3°`)
-- Иконка обновляется каждую минуту
+- The temperature is displayed **directly on the icon** as text (for example, `5°` or `-3°`).
+- The icon refreshes every minute.
 
-### Tooltip (при наведении)
+### Tooltip (on hover)
 
-Показывает:
-- Название города и страны (если доступно)
-- Текущую температуру
-- Время последнего успешного обновления с секундами
+The tooltip shows:
 
-Пример: `Нью-Йорк, США\nТемпература: 0.2 °C (обновлено: 14:35:42)`
+- The city and country, if available
+- The current temperature
+- The time of the last successful update, including seconds
 
-### Контекстное меню (правый клик)
+Example: `New York, United States\nTemperature: 0.2 °C (updated: 14:35:42)`
 
-Содержит:
-- Текущую температуру
-- Время последнего обновления
-- Координаты (LATITUDE и LONGITUDE)
-- Город и страну (если доступны)
-- Пункт **"Обновить сейчас"** для ручного обновления
-- Пункт **"Настройки"** для редактирования настроек через диалог
-- Пункт **"Как пользоваться"** для просмотра справки
-- Пункт **"Показать ошибки API (N)"** для просмотра истории ошибок
-- Пункт **"Выйти"**
+### Context menu (right-click)
 
-## История ошибок API
+The menu contains:
 
-Приложение сохраняет последние 20 ошибок взаимодействия с API. Для просмотра:
+- The current temperature
+- The time of the last update
+- Coordinates (latitude and longitude)
+- The city and country, if available
+- **Refresh now** to update manually
+- **Settings** to edit settings in the dialog
+- **How to use** to view the help
+- **Show API errors (N)** to view error history
+- **Quit**
 
-1. Кликните правой кнопкой мыши на иконку в трее
-2. Выберите пункт "Показать ошибки API (N)"
-3. Откроется диалог с подробной информацией о каждой ошибке:
-   - Время возникновения
-   - Название API
-   - Текст ошибки
-   - URL запроса (если доступен)
+## API error history
 
-## Технические детали
+The app saves the latest 20 API errors. To view them:
 
-- **Язык**: TypeScript
-- **Фреймворк**: Electron
-- **API погоды**: Open-Meteo (https://api.open-meteo.com)
-- **API геокодирования**: Open-Meteo Geocoding (https://geocoding-api.open-meteo.com)
-- **Создание иконок**: Canvas (для отрисовки текста температуры)
-- **Конфигурация**: settings.json файл
+1. Right-click the tray icon.
+2. Select **Show API errors (N)**.
+3. The dialog shows details for each error:
+   - Time of occurrence
+   - API name
+   - Error message
+   - Request URL, if available
 
-## Структура проекта
+## Technical details
+
+- **Language**: TypeScript
+- **Framework**: Electron
+- **Weather API**: Open-Meteo (https://api.open-meteo.com)
+- **Geocoding API**: Open-Meteo Geocoding (https://geocoding-api.open-meteo.com)
+- **Icon generation**: Canvas (to render the temperature text)
+- **Configuration**: `settings.json`
+
+## Project structure
 
 ```
 weather/
 ├── src/
-│   ├── main.ts          # Основной файл приложения
-│   └── canvas.d.ts      # Типы для canvas
-├── dist/                # Скомпилированный JavaScript
-├── settings.json        # Настройки местоположения (создаётся автоматически)
+│   ├── main.ts          # Main application file
+│   └── canvas.d.ts      # Canvas types
+├── dist/                # Compiled JavaScript
+├── settings.json        # Location settings (created automatically)
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
-## Зависимости
+## Dependencies
 
-- `electron` — фреймворк для десктопных приложений
-- `canvas` — библиотека для создания изображений с текстом
+- `electron` — framework for desktop applications
+- `canvas` — library for creating images with text
 
-## Лицензия
+## License
 
 MIT

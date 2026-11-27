@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings } from './helpers';
 
-test.describe('Основные тесты приложения', () => {
+test.describe('Basic application tests', () => {
   let electronApp: any;
 
   test.beforeEach(async () => {
-    // Создаем тестовые настройки
+    // Create test settings
     createTestSettings({
       city: 'Moscow',
       country: 'Russia',
@@ -16,51 +16,51 @@ test.describe('Основные тесты приложения', () => {
   });
 
   test.afterEach(async () => {
-    // Закрываем приложение
+    // Close the app
     if (electronApp) {
       try {
         await electronApp.close();
       } catch (e) {
-        // Игнорируем ошибки при закрытии
+        // Ignore errors while closing
       }
     }
     
-    // Удаляем тестовые настройки
+    // Remove test settings
     removeTestSettings();
   });
 
-  test('должен запускаться без ошибок', async () => {
+  test('should start without errors', async () => {
     electronApp = await launchElectronApp();
     
-    // Проверяем, что приложение запустилось
+    // Check that the app has started
     expect(electronApp).toBeDefined();
     
-    // Ждем инициализации
+    // Wait for initialization
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Проверяем, что процесс работает
+    // Check that the process is running
     try {
       const process = electronApp.process();
       const isRunning = process && !process.killed;
       expect(isRunning).toBe(true);
     } catch (e) {
-      // Если не можем проверить процесс, просто проверяем что приложение определено
+      // If the process cannot be checked, just verify that the app is defined
       expect(electronApp).toBeDefined();
     }
   });
 
-  test('должен открывать окно настроек', async () => {
+  test('should open the settings window', async () => {
     electronApp = await launchElectronApp();
     
-    // Ждем инициализации
+    // Wait for initialization
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Открываем окно настроек через IPC (если доступно)
-    // Или используем другой способ - для теста проверяем, что приложение запустилось
+    // Open the settings window through IPC (if available)
+    // Alternatively, just verify that the app has started
     const windows = await electronApp.windows();
     
-    // Приложение может не иметь видимых окон (работает в трее)
-    // Но мы можем проверить, что оно запустилось
+    // The app may not have visible windows (it runs in the tray)
+    // We can still verify that it has started
     expect(electronApp).toBeDefined();
   });
 });

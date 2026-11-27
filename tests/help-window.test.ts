@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings } from './helpers';
 
-test.describe('Тесты окна справки', () => {
+test.describe('Help window tests', () => {
   let electronApp: any;
 
   test.beforeEach(async () => {
@@ -19,33 +19,33 @@ test.describe('Тесты окна справки', () => {
       try {
         await electronApp.close();
       } catch (e) {
-        // Игнорируем ошибки
+        // Ignore errors
       }
     }
     removeTestSettings();
   });
 
-  test('должен открывать окно справки с правильным содержимым', async () => {
+  test('should open the help window with the expected content', async () => {
     electronApp = await launchElectronApp();
     
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    const helpWindow = await waitForWindow(electronApp, 'Как пользоваться', 5000);
+    const helpWindow = await waitForWindow(electronApp, 'How to use', 5000);
     
     if (helpWindow) {
-      // Проверяем содержимое справки
+      // Check the help content
       const content = await helpWindow.content();
       
-      // Проверяем наличие основных разделов
+      // Check that the main sections are present
       expect(content).toContain('Tray Weather');
-      expect(content).toContain('Возможности');
-      expect(content).toContain('Настройка местоположения');
+      expect(content).toContain('Features');
+      expect(content).toContain('Location settings');
       
-      // Проверяем наличие технических деталей
+      // Check that the technical details are present
       expect(content).toContain('TypeScript');
       expect(content).toContain('Electron');
     } else {
-      // Окно может не открываться автоматически
+      // The window may not open automatically
       expect(electronApp).toBeDefined();
     }
   });

@@ -3,18 +3,18 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 /**
- * Запускает Electron приложение для тестирования
+ * Launches the Electron app for testing
  */
 export async function launchElectronApp(): Promise<ElectronApplication> {
-  // Сначала убеждаемся, что приложение скомпилировано
+  // First, make sure the app has been compiled
   const distPath = path.join(__dirname, '../dist/main.js');
   if (!fs.existsSync(distPath)) {
-    throw new Error('Приложение не скомпилировано. Запустите "npm run build" перед тестами.');
+    throw new Error('App is not compiled. Run "npm run build" before the tests.');
   }
 
-  // Убираем конфликтующие переменные окружения
+  // Remove conflicting environment variables
   const env: { [key: string]: string } = {};
-  // Копируем только строковые значения
+  // Copy string values only
   for (const key in process.env) {
     if (process.env[key] !== undefined) {
       env[key] = process.env[key] as string;
@@ -34,7 +34,7 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
 }
 
 /**
- * Ожидает открытия окна с заданным заголовком
+ * Waits for a window with the specified title to open
  */
 export async function waitForWindow(
   electronApp: ElectronApplication,
@@ -58,14 +58,14 @@ export async function waitForWindow(
 }
 
 /**
- * Получает все открытые окна Electron
+ * Gets all open Electron windows
  */
 export async function getAllWindows(electronApp: ElectronApplication): Promise<Page[]> {
   return electronApp.windows();
 }
 
 /**
- * Создает временный файл настроек для тестов
+ * Creates a temporary settings file for tests
  */
 export function createTestSettings(settings: any): string {
   const testSettingsPath = path.join(__dirname, '../settings.test.json');
@@ -74,7 +74,7 @@ export function createTestSettings(settings: any): string {
 }
 
 /**
- * Удаляет временный файл настроек
+ * Removes the temporary settings file
  */
 export function removeTestSettings(): void {
   const testSettingsPath = path.join(__dirname, '../settings.test.json');
@@ -84,7 +84,7 @@ export function removeTestSettings(): void {
 }
 
 /**
- * Загружает настройки из файла
+ * Loads settings from a file
  */
 export function loadTestSettings(): any {
   const testSettingsPath = path.join(__dirname, '../settings.test.json');
