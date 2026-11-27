@@ -5,7 +5,7 @@ import * as fs from 'fs';
 /**
  * Launches the Electron app for testing
  */
-export async function launchElectronApp(): Promise<ElectronApplication> {
+export async function launchElectronApp(options: { openSettings?: boolean } = {}): Promise<ElectronApplication> {
   // First, make sure the app has been compiled
   const distPath = path.join(__dirname, '../dist/main.js');
   if (!fs.existsSync(distPath)) {
@@ -23,6 +23,10 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
   delete env.NO_COLOR;
   env.NODE_ENV = 'test';
   env.ELECTRON_DISABLE_SANDBOX = '1';
+  env.WEATHER_SETTINGS_PATH = path.join(__dirname, '../settings.test.json');
+  env.WEATHER_TEST_NO_NETWORK = '1';
+  if (options.openSettings) env.WEATHER_TEST_OPEN_SETTINGS = '1';
+  else delete env.WEATHER_TEST_OPEN_SETTINGS;
 
   const electronApp = await electron.launch({
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', distPath],
@@ -46,9 +50,11 @@ export async function waitForWindow(
   while (Date.now() - startTime < timeout) {
     const windows = electronApp.windows();
     for (const window of windows) {
-      const windowTitle = await window.title();
-      if (windowTitle.includes(title)) {
-        return window;
+      try {
+        const windowTitle = await window.title();
+        if (windowTitle.includes(title)) return window;
+      } catch {
+        // A data URL window may still be navigating while Electron exposes it.
       }
     }
     await new Promise(resolve => setTimeout(resolve, 100));

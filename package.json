@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "build:electron": "electron-builder --publish never",
     "test": "playwright test",
+    "test:unit": "npm run build && node --test tests/unit/settings.test.cjs tests/unit/settings-ipc.test.cjs",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed"
   },
@@ -33,6 +34,12 @@
       "dist/**/*",
       "package.json",
       "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "portable-mode",
+        "to": "portable-mode"
+      }
     ],
     "win": {
       "target": [

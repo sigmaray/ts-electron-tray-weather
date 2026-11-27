@@ -84,5 +84,26 @@ test.describe('Settings window tests', () => {
       await expect(validationErrors).toBeVisible({ timeout: 2000 });
     }
   });
+
+  test('isolates the renderer and validates saves in the main process', async () => {
+    electronApp = await launchElectronApp({ openSettings: true });
+    const settingsWindow = await waitForWindow(electronApp, 'Settings', 10000);
+    expect(settingsWindow).not.toBeNull();
+    const rendererState = await settingsWindow!.evaluate(async () => {
+      const globals = window as any;
+      const saveResult = await globals.weatherSettings.save({ latitude: 91 });
+      return {
+        requireType: typeof globals.require,
+        processType: typeof globals.process,
+        saveType: typeof globals.weatherSettings.save,
+        saveResult,
+      };
+    });
+    expect(rendererState.requireType).toBe('undefined');
+    expect(rendererState.processType).toBe('undefined');
+    expect(rendererState.saveType).toBe('function');
+    expect(rendererState.saveResult.ok).toBe(false);
+    expect(rendererState.saveResult.errors).toContain('Latitude must be between -90 and 90');
+  });
 });
 

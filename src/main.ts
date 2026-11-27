@@ -3,6 +3,8 @@ import { createCanvas } from "canvas";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { createSettingsStore, Settings } from "./settings";
+import { registerSettingsSaveHandler } from "./settings-ipc";
 
 const isMac = os.platform() === "darwin";
 const isWindows = os.platform() === "win32";
@@ -11,82 +13,19 @@ const isLinux = os.platform() === "linux";
 // Constant controlling whether only one app instance is allowed
 const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
 
-// Settings interface
-interface Settings {
-  city?: string;
-  country?: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  updateIntervalInSeconds?: number;
-  apiProvider?: 'open-meteo' | 'openweathermap';
-  apiKey?: string;
-}
+const settingsStore = createSettingsStore({
+  appPath: app.getAppPath(),
+  resourcesPath: process.resourcesPath,
+  userDataPath: app.getPath("userData"),
+  overridePath: process.env.WEATHER_SETTINGS_PATH,
+});
 
-// Resolve the path to settings.json in the project root
-// In Electron, __dirname may point to dist/, so check several locations
 function getSettingsPath(): string {
-  // Option 1: when running from dist/, settings.json is in the parent directory
-  const distPath = path.join(__dirname, "..", "settings.json");
-  if (fs.existsSync(distPath)) {
-    return distPath;
-  }
-  
-  // Option 2: when running from the project root
-  const rootPath = path.join(process.cwd(), "settings.json");
-  if (fs.existsSync(rootPath)) {
-    return rootPath;
-  }
-  
-  // Option 3: create it in the project root (where package.json is located)
-  return rootPath;
+  return settingsStore.getPath();
 }
 
 function loadSettings(): Settings {
-  const settingsPath = getSettingsPath();
-  
-  // Create settings.json with default values if it does not exist
-  if (!fs.existsSync(settingsPath)) {
-    const defaultSettings: Settings = {
-      city: "New York City",
-      country: "United States",
-      latitude: null,
-      longitude: null,
-      updateIntervalInSeconds: 60,
-      apiProvider: 'open-meteo',
-      apiKey: undefined,
-    };
-    fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2), "utf8");
-    console.log(`Created settings.json with default values: ${settingsPath}`);
-    return defaultSettings;
-  }
-  
-  // Load settings from settings.json
-  try {
-    const settingsContent = fs.readFileSync(settingsPath, "utf8");
-    const settings: Settings = JSON.parse(settingsContent);
-    // Set the default value for updateIntervalInSeconds if it is missing
-    if (settings.updateIntervalInSeconds === undefined || settings.updateIntervalInSeconds === null) {
-      settings.updateIntervalInSeconds = 60;
-    }
-    // Set the default value for apiProvider if it is missing
-    if (!settings.apiProvider || (settings.apiProvider !== 'open-meteo' && settings.apiProvider !== 'openweathermap')) {
-      settings.apiProvider = 'open-meteo';
-    }
-    console.log(`Loaded settings.json: ${settingsPath}`);
-    return settings;
-  } catch (err) {
-    console.error("Error loading settings.json:", err);
-    // Return the default settings on error
-    return {
-      city: "New York City",
-      country: "United States",
-      latitude: null,
-      longitude: null,
-      updateIntervalInSeconds: 60,
-      apiProvider: 'open-meteo',
-      apiKey: undefined,
-    };
-  }
+  return settingsStore.load();
 }
 
 // Load settings
@@ -296,15 +235,7 @@ function isUrl(text: string): boolean {
  * Save settings to settings.json
  */
 function saveSettings(newSettings: Settings): boolean {
-  try {
-    const settingsPath = getSettingsPath();
-    fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2), "utf8");
-    console.log(`Settings saved to: ${settingsPath}`);
-    return true;
-  } catch (err) {
-    console.error("Error saving settings.json:", err);
-    return false;
-  }
+  return settingsStore.save(newSettings);
 }
 
 /**
@@ -406,99 +337,6 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   void updateTrayTemperature();
 
   return true;
-}
-
-/**
- * Validate settings
- */
-function validateSettings(newSettings: Partial<Settings>): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
-  // Validate updateIntervalInSeconds
-  if (newSettings.updateIntervalInSeconds !== undefined && newSettings.updateIntervalInSeconds !== null) {
-    if (typeof newSettings.updateIntervalInSeconds !== "number" || isNaN(newSettings.updateIntervalInSeconds)) {
-      errors.push("Update interval must be a number");
-    } else if (newSettings.updateIntervalInSeconds < 1) {
-      errors.push("Update interval must be at least 1 second");
-    }
-  }
-
-  // Validate latitude
-  if (newSettings.latitude !== undefined && newSettings.latitude !== null) {
-    if (typeof newSettings.latitude !== "number" || isNaN(newSettings.latitude)) {
-      errors.push("Latitude must be a number");
-    } else if (newSettings.latitude < -90 || newSettings.latitude > 90) {
-      errors.push("Latitude must be between -90 and 90");
-    }
-  }
-
-  // Validate longitude
-  if (newSettings.longitude !== undefined && newSettings.longitude !== null) {
-    if (typeof newSettings.longitude !== "number" || isNaN(newSettings.longitude)) {
-      errors.push("Longitude must be a number");
-    } else if (newSettings.longitude < -180 || newSettings.longitude > 180) {
-      errors.push("Longitude must be between -180 and 180");
-    }
-  }
-
-  // Validate city
-  if (newSettings.city !== undefined && newSettings.city !== null && newSettings.city.trim() === "") {
-    errors.push("City cannot be an empty string (use null to clear it)");
-  }
-
-  // Validate country
-  if (newSettings.country !== undefined && newSettings.country !== null && newSettings.country.trim() === "") {
-    errors.push("Country cannot be an empty string (use null to clear it)");
-  }
-
-  // Validate apiProvider
-  if (newSettings.apiProvider !== undefined) {
-    if (newSettings.apiProvider !== 'open-meteo' && newSettings.apiProvider !== 'openweathermap') {
-      errors.push("API provider must be 'open-meteo' or 'openweathermap'");
-    }
-  }
-
-  // Validate apiKey: required for openweathermap
-  const mergedForValidation: Settings = {
-    ...settings,
-    ...newSettings,
-  };
-  const finalApiProvider = mergedForValidation.apiProvider ?? 'open-meteo';
-  if (finalApiProvider === 'openweathermap') {
-    const apiKey = mergedForValidation.apiKey;
-    if (!apiKey || apiKey.trim() === '') {
-      errors.push("An API key is required when using the OpenWeatherMap API");
-    }
-  }
-
-  // Ensure either coordinates or a city and country are specified
-
-  // Check whether at least one coordinate is set
-  const hasAnyCoordinate = (mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined) ||
-                           (mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined);
-  const hasBothCoordinates = mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined &&
-                             mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined;
-  
-  // Check whether either city or country is set
-  const hasAnyCityCountry = (mergedForValidation.city && mergedForValidation.city.trim() !== "") ||
-                            (mergedForValidation.country && mergedForValidation.country.trim() !== "");
-  const hasBothCityCountry = mergedForValidation.city && mergedForValidation.city.trim() !== "" &&
-                             mergedForValidation.country && mergedForValidation.country.trim() !== "";
-
-  // Check that both options are not set at the same time, even partially
-  if (hasAnyCoordinate && hasAnyCityCountry) {
-    errors.push("You cannot specify both a city/country and coordinates. Choose one option.");
-  }
-
-  // Check that at least one complete option is set
-  if (!hasBothCoordinates && !hasBothCityCountry) {
-    errors.push("Specify either both coordinates (latitude and longitude) or a city and country");
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
 }
 
 /**
@@ -876,8 +714,6 @@ function showSettings(): void {
       </div>
 
       <script>
-        const { ipcRenderer } = require('electron');
-        
         // Load the current settings
         const currentSettings = ${JSON.stringify(settings)};
         
@@ -1028,7 +864,9 @@ function showSettings(): void {
           }
 
           // Send settings to the main process for validation and saving
-          ipcRenderer.send('save-settings', newSettings);
+          (window as any).weatherSettings.save(newSettings).then((result: { ok: boolean; errors?: string[] }) => {
+            if (!result.ok) showValidationErrors(result.errors || ['Could not save settings']);
+          }).catch(() => showValidationErrors(['Could not save settings']));
         });
 
         document.getElementById('cancelBtn').addEventListener('click', () => {
@@ -1134,13 +972,6 @@ function showSettings(): void {
           }, duration);
         }
 
-        // Handle responses from the main process
-        // The window closes automatically after a successful save,
-        // and a system notification is shown
-
-        ipcRenderer.on('settings-error', (event, errors) => {
-          showValidationErrors(errors);
-        });
       </script>
     </body>
     </html>
@@ -1166,8 +997,9 @@ function showSettings(): void {
     y: windowPosition.y,
     title: "Settings — Tray Weather",
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     resizable: true,
     modal: false,
@@ -1175,65 +1007,34 @@ function showSettings(): void {
 
   // Load the HTML content
   settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-  // Handle settings saves
-  // Remove any previous handlers for this window
-  const handler = async (event: any, newSettings: Partial<Settings>) => {
-    // Check that the event came from our window
-    if (event.sender !== settingsWindow!.webContents) {
-      return;
+  settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  settingsWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('data:text/html')) {
+      event.preventDefault();
+      shell.openExternal(url);
     }
+  });
 
-    // Server-side validation
-    const validation = validateSettings(newSettings);
-    
-    if (!validation.valid) {
-      event.sender.send('settings-error', validation.errors);
-      return;
-    }
-
-    // Apply the settings
-    const success = await applySettings(newSettings as Settings);
-    
-    if (success) {
-      // Remove the handler after a successful save
-      ipcMain.removeListener('save-settings', handler);
-      // Close the settings window
-      settingsWindow!.close();
-      // Show a system notification after the window closes
+  registerSettingsSaveHandler(ipcMain, {
+    getCurrentSettings: () => settings,
+    isTrustedSender: sender => !settingsWindow?.isDestroyed() && sender === settingsWindow?.webContents,
+    apply: applySettings,
+    onSaved: () => {
+      settingsWindow?.close();
       setTimeout(() => {
         if (Notification.isSupported()) {
-          const notification = new Notification({
-            title: 'Settings saved',
-            body: 'Settings were saved and applied successfully.',
-            silent: false,
-          });
-          notification.show();
+          new Notification({ title: 'Settings saved', body: 'Settings were saved and applied successfully.', silent: false }).show();
         }
-      }, 100); // A short delay to close the window correctly
-    } else {
-      // On error, show a message but keep the settings window open
-      // so the user can correct the values
-      // The app will continue using the previous settings.
-      const errorMessage = 'Could not apply the settings. Check the coordinates or city and country. The app will continue using the previous settings.';
-      event.sender.send('settings-error', [errorMessage]);
-      // Show the dialog asynchronously so execution is not blocked
-      dialog.showMessageBox(settingsWindow!, {
-        type: 'error',
-        title: 'Error applying settings',
-        message: errorMessage,
-        buttons: ['OK'],
-      }).catch((err) => {
-        console.error('Error showing dialog:', err);
-      });
-    }
-  };
-
-  ipcMain.on('save-settings', handler);
+      }, 100);
+    },
+  });
 
   // Window close handler: clear the reference and remove the IPC handler
   settingsWindow.on('closed', () => {
-    ipcMain.removeListener('save-settings', handler);
+    ipcMain.removeHandler('settings:save');
     settingsWindow = null;
   });
 }
@@ -1513,8 +1314,8 @@ function showHelp(): void {
     y: windowPosition.y,
     title: "How to use — Tray Weather",
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
@@ -2314,8 +2115,8 @@ function showApiRequests(): void {
     y: windowPosition.y,
     title: `API request history (${apiRequests.length} of ${MAX_REQUESTS})`,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
@@ -2576,8 +2377,8 @@ function showApiErrors(): void {
     y: windowPosition.y,
     title: `API error history (${apiErrors.length} of ${MAX_ERRORS})`,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
@@ -2780,6 +2581,16 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
  * Initialize coordinates and location names
  */
 async function initializeLocation(): Promise<boolean> {
+  const offlineTestMode = process.env.NODE_ENV === 'test' && process.env.WEATHER_TEST_NO_NETWORK === '1';
+
+  // Use a stable test location so UI and tray tests do not depend on geocoding availability.
+  if (offlineTestMode && (LATITUDE === null || LONGITUDE === null) && CITY && COUNTRY) {
+    LATITUDE = 55.7558;
+    LONGITUDE = 37.6173;
+    cityName = CITY;
+    countryName = COUNTRY;
+  }
+
   // If coordinates are not set but a city and country are
   if ((LATITUDE === null || LONGITUDE === null) && CITY && COUNTRY) {
     console.log(`Looking up coordinates for ${CITY}, ${COUNTRY}...`);
@@ -2817,7 +2628,10 @@ async function initializeLocation(): Promise<boolean> {
     // Get the city and country names from the coordinates
     // If only coordinates are used (CITY and COUNTRY are undefined), always look up the names
     // Also look them up if the names are not yet available
-    if ((CITY === undefined && COUNTRY === undefined) || !cityName || !countryName) {
+    if (offlineTestMode) {
+      cityName = CITY || 'Moscow';
+      countryName = COUNTRY || 'Russia';
+    } else if ((CITY === undefined && COUNTRY === undefined) || !cityName || !countryName) {
       const location = await fetchLocationByCoordinates(LATITUDE, LONGITUDE);
       if (location) {
         cityName = location.cityName;
@@ -3863,6 +3677,7 @@ if (ALLOW_ONLY_ONE_INSTANCE) {
       await initializeEmojiCache();
       // Do not create a window; only the tray is needed.
       await createTray();
+      if (process.env.NODE_ENV === 'test' && process.env.WEATHER_TEST_OPEN_SETTINGS === '1') showSettings();
     });
   }
 } else {
@@ -3872,6 +3687,7 @@ if (ALLOW_ONLY_ONE_INSTANCE) {
     await initializeEmojiCache();
     // Do not create a window; only the tray is needed.
     await createTray();
+    if (process.env.NODE_ENV === 'test' && process.env.WEATHER_TEST_OPEN_SETTINGS === '1') showSettings();
   });
 }
 
