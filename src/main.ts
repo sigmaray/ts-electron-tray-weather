@@ -8,10 +8,10 @@ const isMac = os.platform() === "darwin";
 const isWindows = os.platform() === "win32";
 const isLinux = os.platform() === "linux";
 
-// Константа для управления разрешением только одного экземпляра приложения
+// Constant controlling whether only one app instance is allowed
 const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
 
-// Интерфейс для настроек
+// Settings interface
 interface Settings {
   city?: string;
   country?: string;
@@ -22,29 +22,29 @@ interface Settings {
   apiKey?: string;
 }
 
-// Определяем путь к settings.json fileу (in the project root)
-// В Electron __dirname может указывать на dist/, поэтому проверяем несколько вариантов
+// Resolve the path to settings.json in the project root
+// In Electron, __dirname may point to dist/, so check several locations
 function getSettingsPath(): string {
-  // Вариант 1: если запускаем из dist/, то settings.json в родительской директории
+  // Option 1: when running from dist/, settings.json is in the parent directory
   const distPath = path.join(__dirname, "..", "settings.json");
   if (fs.existsSync(distPath)) {
     return distPath;
   }
   
-  // Вариант 2: если запускаем из корня проекта
+  // Option 2: when running from the project root
   const rootPath = path.join(process.cwd(), "settings.json");
   if (fs.existsSync(rootPath)) {
     return rootPath;
   }
   
-  // Вариант 3: создаём in the project root (где находится package.json)
+  // Option 3: create it in the project root (where package.json is located)
   return rootPath;
 }
 
 function loadSettings(): Settings {
   const settingsPath = getSettingsPath();
   
-  // Создаём settings.json file с дефолтными значениями, если его нет
+  // Create settings.json with default values if it does not exist
   if (!fs.existsSync(settingsPath)) {
     const defaultSettings: Settings = {
       city: "New York City",
@@ -60,15 +60,15 @@ function loadSettings(): Settings {
     return defaultSettings;
   }
   
-  // Загружаем настройки из settings.json
+  // Load settings from settings.json
   try {
     const settingsContent = fs.readFileSync(settingsPath, "utf8");
     const settings: Settings = JSON.parse(settingsContent);
-    // Устанавливаем значение по умолчанию для updateIntervalInSeconds, если оно отсутствует
+    // Set the default value for updateIntervalInSeconds if it is missing
     if (settings.updateIntervalInSeconds === undefined || settings.updateIntervalInSeconds === null) {
       settings.updateIntervalInSeconds = 60;
     }
-    // Устанавливаем значение по умолчанию для apiProvider, если оно отсутствует
+    // Set the default value for apiProvider if it is missing
     if (!settings.apiProvider || (settings.apiProvider !== 'open-meteo' && settings.apiProvider !== 'openweathermap')) {
       settings.apiProvider = 'open-meteo';
     }
@@ -76,7 +76,7 @@ function loadSettings(): Settings {
     return settings;
   } catch (err) {
     console.error("Error loading settings.json:", err);
-    // Возвращаем дефолтные настройки при ошибке
+    // Return the default settings on error
     return {
       city: "New York City",
       country: "United States",
@@ -89,68 +89,68 @@ function loadSettings(): Settings {
   }
 }
 
-// Загружаем настройки
+// Load settings
 let settings = loadSettings();
 
-// Читаем настройки местоположения из settings.json
-// Можно указать ЛИБО координаты (latitude, longitude), ЛИБО город и страну (city, country)
+// Read location settings from settings.json
+// Specify either coordinates (latitude, longitude) or a city and country (city, country)
 let CITY: string | undefined = settings.city;
 let COUNTRY: string | undefined = settings.country;
 
-// Если указаны CITY и COUNTRY, но не LATITUDE и LONGITUDE, координаты будут определены через API
+// If CITY and COUNTRY are set but LATITUDE and LONGITUDE are not, look up the coordinates through the API
 let LATITUDE: number | null = settings.latitude ?? null;
 let LONGITUDE: number | null = settings.longitude ?? null;
 
-// Интервал обновления температуры в секундах (по умолчанию 60)
+// Temperature refresh interval in seconds (default: 60)
 let UPDATE_INTERVAL_SECONDS: number = settings.updateIntervalInSeconds ?? 60;
 
-// API провайдер (по умолчанию open-meteo)
+// API provider (default: open-meteo)
 let API_PROVIDER: 'open-meteo' | 'openweathermap' = settings.apiProvider ?? 'open-meteo';
 
-// API ключ (требуется для openweathermap)
+// API key (required for openweathermap)
 let API_KEY: string | undefined = settings.apiKey;
 
-// URL для запроса погоды (генерируется в initializeLocation)
+// Weather request URL (generated in initializeLocation)
 let WEATHER_URL = "";
 
 let tray: Tray | null = null;
-let weatherTray: Tray | null = null; // Вторая иконка для погодных условий
+let weatherTray: Tray | null = null; // Second icon for weather conditions
 let updateInterval: NodeJS.Timeout | null = null;
 let lastUpdateTime: Date | null = null;
 let cityName: string = "";
 let countryName: string = "";
 
-// Массив для хранения последних 20 ошибок API
+// Array storing the 100 most recent API errors
 interface ApiError {
   timestamp: Date;
   api: string; // API name (weather, geocoding, etc.)
   error: string; // Error message
-  url?: string; // URL запроса (опционально)
-  statusCode?: number; // HTTP статус код (404, 403, 500 и т.д.)
-  errorCode?: string; // Код ошибки Node.js (ENOTFOUND, ECONNREFUSED и т.д.)
-  details?: string; // Дополнительные детали
+  url?: string; // Request URL (optional)
+  statusCode?: number; // HTTP status code (404, 403, 500, etc.)
+  errorCode?: string; // Node.js error code (ENOTFOUND, ECONNREFUSED, etc.)
+  details?: string; // Additional details
 }
 
 const apiErrors: ApiError[] = [];
-const MAX_ERRORS = 20;
+const MAX_ERRORS = 100;
 
-// Массив для хранения последних 20 API-запросов
+// Array storing the 100 most recent API requests
 interface ApiRequest {
   timestamp: Date;
   api: string; // API name (weather, geocoding, etc.)
-  url: string; // URL запроса
-  method: string; // HTTP метод (GET, POST, etc.)
-  requestHeaders?: Record<string, string>; // Заголовки запроса
-  responseStatus?: number; // HTTP статус код ответа
-  responseHeaders?: Record<string, string>; // Заголовки ответа
-  responseBody?: string; // Тело ответа (JSON строка)
-  duration?: number; // Длительность запроса в мс
+  url: string; // request URL
+  method: string; // HTTP method (GET, POST, etc.)
+  requestHeaders?: Record<string, string>; // Request headers
+  responseStatus?: number; // HTTP response status code
+  responseHeaders?: Record<string, string>; // Response headers
+  responseBody?: string; // Response body (JSON string)
+  duration?: number; // Request duration in ms
 }
 
 const apiRequests: ApiRequest[] = [];
-const MAX_REQUESTS = 20;
+const MAX_REQUESTS = 100;
 
-// Ссылки на открытые окна (для предотвращения дублирования)
+// References to open windows (to prevent duplicates)
 let settingsWindow: BrowserWindow | null = null;
 let weatherWindow: BrowserWindow | null = null;
 let isWeatherDetailsOpening = false;
@@ -159,7 +159,7 @@ let errorWindow: BrowserWindow | null = null;
 let helpWindow: BrowserWindow | null = null;
 
 /**
- * Извлекает детальную информацию из ошибки
+ * Extract detailed information from an error
  */
 function extractErrorDetails(err: unknown): {
   message: string;
@@ -173,26 +173,26 @@ function extractErrorDetails(err: unknown): {
     let statusCode: number | undefined;
     let details: string | undefined;
 
-    // Проверяем наличие кода ошибки Node.js (ENOTFOUND, ECONNREFUSED и т.д.)
+    // Check for a Node.js error code (ENOTFOUND, ECONNREFUSED, etc.)
     if ((err as any).code) {
       errorCode = (err as any).code;
     }
 
-    // Проверяем наличие HTTP статус кода
+    // Check for an HTTP status code
     const httpStatusMatch = message.match(/HTTP error (\d+)/i) || message.match(/status (\d+)/i);
     if (httpStatusMatch) {
       statusCode = parseInt(httpStatusMatch[1], 10);
     }
 
-    // Извлекаем дополнительные детали из stack trace или других свойств
+    // Extract additional details from the stack trace or other properties
     if (err.stack) {
       const stackLines = err.stack.split('\n');
       if (stackLines.length > 1) {
-        details = stackLines.slice(1, 3).join('\n').trim(); // Первые 2 строки stack trace после сообщения
+        details = stackLines.slice(1, 3).join('\n').trim(); // First two stack trace lines after the message
       }
     }
 
-    // Если есть свойство cause, добавляем его в детали
+    // If a cause property exists, include it in the details
     if ((err as any).cause) {
       const cause = (err as any).cause;
       if (details) {
@@ -209,7 +209,7 @@ function extractErrorDetails(err: unknown): {
 }
 
 /**
- * Добавляет ошибку в список последних ошибок с детальной информацией
+ * Add an error with details to the recent errors list
  */
 function addApiError(api: string, error: string | Error, url?: string, additionalInfo?: { statusCode?: number; errorCode?: string }): void {
   const errorDetails = extractErrorDetails(error);
@@ -226,9 +226,9 @@ function addApiError(api: string, error: string | Error, url?: string, additiona
   
   apiErrors.push(apiError);
   
-  // Ограничиваем количество ошибок до MAX_ERRORS
+  // Limit the number of errors to MAX_ERRORS
   if (apiErrors.length > MAX_ERRORS) {
-    apiErrors.shift(); // Удаляем самую старую ошибку
+    apiErrors.shift(); // Remove the oldest error
   }
   
   const errorInfo = [
@@ -241,7 +241,7 @@ function addApiError(api: string, error: string | Error, url?: string, additiona
 }
 
 /**
- * Добавляет запрос в историю последних запросов
+ * Add a request to the recent requests history
  */
 function addApiRequest(api: string, url: string, method: string, requestHeaders?: Record<string, string>, responseStatus?: number, responseHeaders?: Record<string, string>, responseBody?: string, duration?: number): void {
   const apiRequest: ApiRequest = {
@@ -258,16 +258,16 @@ function addApiRequest(api: string, url: string, method: string, requestHeaders?
   
   apiRequests.push(apiRequest);
   
-  // Ограничиваем количество запросов до MAX_REQUESTS
+  // Limit the number of requests to MAX_REQUESTS
   if (apiRequests.length > MAX_REQUESTS) {
-    apiRequests.shift(); // Удаляем самый старый запрос
+    apiRequests.shift(); // Remove the oldest request
   }
   
   console.log(`[${api}] Request added to history: ${method} ${url} (${responseStatus || 'N/A'})`);
 }
 
 /**
- * Экранирует HTML-специальные символы
+ * Escape HTML special characters
  */
 function escapeHtml(text: string): string {
   const map: { [key: string]: string } = {
@@ -281,7 +281,7 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Проверяет, является ли строка URL
+ * Check whether a string is a URL
  */
 function isUrl(text: string): boolean {
   try {
@@ -293,7 +293,7 @@ function isUrl(text: string): boolean {
 }
 
 /**
- * Сохраняет настройки в file settings.json
+ * Save settings to settings.json
  */
 function saveSettings(newSettings: Settings): boolean {
   try {
@@ -308,10 +308,10 @@ function saveSettings(newSettings: Settings): boolean {
 }
 
 /**
- * Применяет новые настройки и переинициализирует приложение
+ * Apply new settings and reinitialize the app
  */
 async function applySettings(newSettings: Settings): Promise<boolean> {
-  // Сохраняем текущие настройки для возможного отката
+  // Save the current settings in case rollback is needed
   const previousSettings = { ...settings };
   const previousCity = CITY;
   const previousCountry = COUNTRY;
@@ -324,14 +324,14 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   const previousApiProvider = API_PROVIDER;
   const previousApiKey = API_KEY;
 
-  // Объединяем с текущими настройками (на случай частичного обновления)
+  // Merge with the current settings (in case of a partial update)
   const mergedSettings: Settings = {
     ...settings,
     ...newSettings,
   };
 
-  // Обновляем глобальные переменные
-  // Явно устанавливаем null/undefined, чтобы очистить старые значения
+  // Update the global variables
+  // Explicitly set null/undefined to clear old values
   CITY = mergedSettings.city ?? undefined;
   COUNTRY = mergedSettings.country ?? undefined;
   LATITUDE = mergedSettings.latitude ?? null;
@@ -341,20 +341,20 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   API_KEY = mergedSettings.apiKey;
   settings = mergedSettings;
   
-  // Очищаем WEATHER_URL при изменении настроек, чтобы он пересоздался в initializeLocation
+  // Clear WEATHER_URL when settings change so it is recreated in initializeLocation
   WEATHER_URL = "";
   
-  // Если переключились с города/страны на координаты, очищаем старые названия
-  // чтобы они обновились по новым координатам
+  // If switching from a city/country to coordinates, clear the old names
+  // so they can be refreshed from the new coordinates
   if (previousCity && previousCountry && (CITY === undefined || COUNTRY === undefined) && 
       LATITUDE !== null && LONGITUDE !== null) {
     cityName = "";
     countryName = "";
   }
 
-  // Сохраняем в file
+  // Save to file
   if (!saveSettings(mergedSettings)) {
-    // Откатываем изменения при ошибке сохранения
+    // Roll back changes if saving fails
     CITY = previousCity;
     COUNTRY = previousCountry;
     LATITUDE = previousLatitude;
@@ -369,10 +369,10 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
     return false;
   }
 
-  // Переинициализируем местоположение
+  // Reinitialize the location
   const initialized = await initializeLocation();
   if (!initialized) {
-    // Откатываем изменения при ошибке инициализации
+    // Roll back changes if initialization fails
     CITY = previousCity;
     COUNTRY = previousCountry;
     LATITUDE = previousLatitude;
@@ -384,37 +384,37 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
     API_PROVIDER = previousApiProvider;
     API_KEY = previousApiKey;
     settings = previousSettings;
-    // Восстанавливаем file с предыдущими настройками
+    // Restore the file with the previous settings
     saveSettings(previousSettings);
-    // НЕ переинициализируем местоположение - оставляем текущее состояние
-    // Приложение продолжит работать с предыдущими настройками
+    // Do not reinitialize the location; keep the current state
+    // The app will continue using the previous settings
     console.log("Changes rolled back. The app continues running with the previous settings.");
     return false;
   }
 
-  // Обновляем интервал обновления
+  // Update the refresh interval
   if (updateInterval) {
     clearInterval(updateInterval);
   }
   const updateIntervalMs = UPDATE_INTERVAL_SECONDS * 1000;
-  console.log(`Temperature update interval updated: ${UPDATE_INTERVAL_SECONDS} секунд (${updateIntervalMs} мс)`);
+  console.log(`Temperature update interval updated: ${UPDATE_INTERVAL_SECONDS} seconds (${updateIntervalMs} ms)`);
   updateInterval = setInterval(() => {
     void updateTrayTemperature();
   }, updateIntervalMs);
 
-  // Обновляем температуру сразу
+  // Refresh the temperature immediately
   void updateTrayTemperature();
 
   return true;
 }
 
 /**
- * Валидирует настройки
+ * Validate settings
  */
 function validateSettings(newSettings: Partial<Settings>): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  // Валидация updateIntervalInSeconds
+  // Validate updateIntervalInSeconds
   if (newSettings.updateIntervalInSeconds !== undefined && newSettings.updateIntervalInSeconds !== null) {
     if (typeof newSettings.updateIntervalInSeconds !== "number" || isNaN(newSettings.updateIntervalInSeconds)) {
       errors.push("Update interval must be a number");
@@ -423,7 +423,7 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
     }
   }
 
-  // Валидация latitude
+  // Validate latitude
   if (newSettings.latitude !== undefined && newSettings.latitude !== null) {
     if (typeof newSettings.latitude !== "number" || isNaN(newSettings.latitude)) {
       errors.push("Latitude must be a number");
@@ -432,7 +432,7 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
     }
   }
 
-  // Валидация longitude
+  // Validate longitude
   if (newSettings.longitude !== undefined && newSettings.longitude !== null) {
     if (typeof newSettings.longitude !== "number" || isNaN(newSettings.longitude)) {
       errors.push("Longitude must be a number");
@@ -441,24 +441,24 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
     }
   }
 
-  // Валидация city
+  // Validate city
   if (newSettings.city !== undefined && newSettings.city !== null && newSettings.city.trim() === "") {
     errors.push("City cannot be an empty string (use null to clear it)");
   }
 
-  // Валидация country
+  // Validate country
   if (newSettings.country !== undefined && newSettings.country !== null && newSettings.country.trim() === "") {
     errors.push("Country cannot be an empty string (use null to clear it)");
   }
 
-  // Валидация apiProvider
+  // Validate apiProvider
   if (newSettings.apiProvider !== undefined) {
     if (newSettings.apiProvider !== 'open-meteo' && newSettings.apiProvider !== 'openweathermap') {
-      errors.push("API provider must be 'open-meteo' или 'openweathermap'");
+      errors.push("API provider must be 'open-meteo' or 'openweathermap'");
     }
   }
 
-  // Валидация apiKey: обязателен для openweathermap
+  // Validate apiKey: required for openweathermap
   const mergedForValidation: Settings = {
     ...settings,
     ...newSettings,
@@ -471,26 +471,26 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
     }
   }
 
-  // Проверка: должны быть указаны либо координаты, либо город и страна
+  // Ensure either coordinates or a city and country are specified
 
-  // Проверяем наличие координат (хотя бы одна заполнена)
+  // Check whether at least one coordinate is set
   const hasAnyCoordinate = (mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined) ||
                            (mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined);
   const hasBothCoordinates = mergedForValidation.latitude !== null && mergedForValidation.latitude !== undefined &&
                              mergedForValidation.longitude !== null && mergedForValidation.longitude !== undefined;
   
-  // Проверяем наличие города/страны (хотя бы одно заполнено)
+  // Check whether either city or country is set
   const hasAnyCityCountry = (mergedForValidation.city && mergedForValidation.city.trim() !== "") ||
                             (mergedForValidation.country && mergedForValidation.country.trim() !== "");
   const hasBothCityCountry = mergedForValidation.city && mergedForValidation.city.trim() !== "" &&
                              mergedForValidation.country && mergedForValidation.country.trim() !== "";
 
-  // Проверяем, что не заполнены одновременно оба варианта (даже частично)
+  // Check that both options are not set at the same time, even partially
   if (hasAnyCoordinate && hasAnyCityCountry) {
     errors.push("You cannot specify both a city/country and coordinates. Choose one option.");
   }
 
-  // Проверяем, что заполнено хотя бы одно полностью
+  // Check that at least one complete option is set
   if (!hasBothCoordinates && !hasBothCityCountry) {
     errors.push("Specify either both coordinates (latitude and longitude) or a city and country");
   }
@@ -502,7 +502,7 @@ function validateSettings(newSettings: Partial<Settings>): { valid: boolean; err
 }
 
 /**
- * Получает координаты для центрирования окна на основном мониторе
+ * Get coordinates to center a window on the primary display
  */
 function getWindowPositionOnPrimaryDisplay(width: number, height: number): { x: number; y: number } {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -516,7 +516,7 @@ function getWindowPositionOnPrimaryDisplay(width: number, height: number): { x: 
 }
 
 /**
- * Показывает диалог настроек для редактирования settings.json
+ * Show the settings dialog for editing settings.json
  */
 function showSettings(): void {
   const html = `
@@ -878,10 +878,10 @@ function showSettings(): void {
       <script>
         const { ipcRenderer } = require('electron');
         
-        // Загружаем текущие настройки
+        // Load the current settings
         const currentSettings = ${JSON.stringify(settings)};
         
-        // Заполняем форму текущими значениями
+        // Fill the form with the current values
         document.getElementById('city').value = currentSettings.city || '';
         document.getElementById('country').value = currentSettings.country || '';
         document.getElementById('latitude').value = currentSettings.latitude !== null && currentSettings.latitude !== undefined ? currentSettings.latitude : '';
@@ -890,7 +890,7 @@ function showSettings(): void {
         document.getElementById('apiProvider').value = currentSettings.apiProvider || 'open-meteo';
         document.getElementById('apiKey').value = currentSettings.apiKey || '';
         
-        // Показываем/скрываем поле API ключа в зависимости от выбранного провайдера
+        // Show or hide the API key field based on the selected provider
         const apiProviderSelect = document.getElementById('apiProvider');
         const apiKeyGroup = document.getElementById('apiKeyGroup');
         
@@ -905,14 +905,14 @@ function showSettings(): void {
         toggleApiKeyField();
         apiProviderSelect.addEventListener('change', toggleApiKeyField);
 
-        // Проверяем при загрузке: если заполнены оба варианта, очищаем координаты (приоритет у города/страны)
+        // On load, if both options are set, clear the coordinates (city/country takes priority)
         const hasCityCountry = (currentSettings.city && currentSettings.city.trim() !== '') &&
                                (currentSettings.country && currentSettings.country.trim() !== '');
         const hasAnyCoordinate = (currentSettings.latitude !== null && currentSettings.latitude !== undefined) ||
                                 (currentSettings.longitude !== null && currentSettings.longitude !== undefined);
         
         if (hasCityCountry && hasAnyCoordinate) {
-          // Очищаем координаты, если заполнены город и страна
+          // Clear the coordinates if city and country are set
           document.getElementById('latitude').value = '';
           document.getElementById('longitude').value = '';
         }
@@ -942,7 +942,7 @@ function showSettings(): void {
           e.preventDefault();
           clearErrors();
 
-          // Собираем данные формы
+          // Collect the form data
           const cityValue = document.getElementById('city').value.trim();
           const countryValue = document.getElementById('country').value.trim();
           const latitudeValue = document.getElementById('latitude').value.trim();
@@ -961,7 +961,7 @@ function showSettings(): void {
             apiKey: apiKeyValue === '' ? undefined : apiKeyValue,
           };
 
-          // Валидация на стороне клиента (базовая)
+          // Client-side validation (basic)
           const validation = {
             valid: true,
             errors: []
@@ -973,7 +973,7 @@ function showSettings(): void {
             showFieldError('updateInterval', 'Interval must be at least 1 second');
           }
 
-          // Валидация API провайдера и ключа
+          // Validate the API provider and key
           if (newSettings.apiProvider !== 'open-meteo' && newSettings.apiProvider !== 'openweathermap') {
             validation.valid = false;
             validation.errors.push('Invalid API provider');
@@ -998,25 +998,25 @@ function showSettings(): void {
             showFieldError('longitude', 'Longitude must be between -180 and 180');
           }
 
-          // Проверяем наличие координат (хотя бы одна заполнена)
+          // Check whether at least one coordinate is set
           const hasAnyCoordinate = (newSettings.latitude !== null && newSettings.latitude !== undefined) ||
                                    (newSettings.longitude !== null && newSettings.longitude !== undefined);
           const hasBothCoordinates = newSettings.latitude !== null && newSettings.latitude !== undefined &&
                                      newSettings.longitude !== null && newSettings.longitude !== undefined;
           
-          // Проверяем наличие города/страны (хотя бы одно заполнено)
+          // Check whether either city or country is set
           const hasAnyCityCountry = (newSettings.city && newSettings.city.trim() !== '') ||
                                     (newSettings.country && newSettings.country.trim() !== '');
           const hasBothCityCountry = newSettings.city && newSettings.city.trim() !== '' &&
                                      newSettings.country && newSettings.country.trim() !== '';
 
-          // Проверяем, что не заполнены одновременно оба варианта (даже частично)
+          // Check that both options are not set at the same time, even partially
           if (hasAnyCoordinate && hasAnyCityCountry) {
             validation.valid = false;
             validation.errors.push('You cannot specify both a city/country and coordinates. Choose one option.');
           }
 
-          // Проверяем, что заполнено хотя бы одно полностью
+          // Check that at least one complete option is set
           if (!hasBothCoordinates && !hasBothCityCountry) {
             validation.valid = false;
             validation.errors.push('Specify either both coordinates (latitude and longitude) or a city and country');
@@ -1027,7 +1027,7 @@ function showSettings(): void {
             return;
           }
 
-          // Отправляем настройки в главный процесс для валидации и сохранения
+          // Send settings to the main process for validation and saving
           ipcRenderer.send('save-settings', newSettings);
         });
 
@@ -1035,7 +1035,7 @@ function showSettings(): void {
           window.close();
         });
 
-        // Логика взаимного исключения: при заполнении города/страны очищаем координаты
+        // Mutual exclusion: clear coordinates when city/country is entered
         const cityInput = document.getElementById('city');
         const countryInput = document.getElementById('country');
         const latitudeInput = document.getElementById('latitude');
@@ -1051,7 +1051,7 @@ function showSettings(): void {
           countryInput.value = '';
         }
 
-        // При вводе в поля города или страны - очищаем координаты
+        // Clear coordinates when entering a city or country
         cityInput.addEventListener('input', () => {
           if (cityInput.value.trim() !== '') {
             clearCoordinates();
@@ -1076,7 +1076,7 @@ function showSettings(): void {
           }
         });
 
-        // При вводе в поля координат - очищаем город и страну
+        // Clear city and country when entering coordinates
         latitudeInput.addEventListener('input', () => {
           if (latitudeInput.value.trim() !== '') {
             clearCityCountry();
@@ -1101,7 +1101,7 @@ function showSettings(): void {
           }
         });
 
-        // Обработка быстрых ссылок на города
+        // Handle quick city links
         document.querySelectorAll('.quick-link').forEach(link => {
           link.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1110,15 +1110,15 @@ function showSettings(): void {
             if (city && country) {
               document.getElementById('city').value = city;
               document.getElementById('country').value = country;
-              // Очищаем координаты при выборе города
+              // Clear coordinates when a city is selected
               clearCoordinates();
-              // Очищаем ошибки
+              // Clear errors
               clearErrors();
             }
           });
         });
 
-        // Функция для показа toast-уведомления
+        // Function to show a toast notification
         function showToast(message, duration = 3000) {
           const toast = document.getElementById('toast');
           toast.textContent = message;
@@ -1134,9 +1134,9 @@ function showSettings(): void {
           }, duration);
         }
 
-        // Обработка ответов от главного процесса
-        // Окно закрывается автоматически после успешного сохранения,
-        // уведомление показывается через системное уведомление
+        // Handle responses from the main process
+        // The window closes automatically after a successful save,
+        // and a system notification is shown
 
         ipcRenderer.on('settings-error', (event, errors) => {
           showValidationErrors(errors);
@@ -1146,7 +1146,7 @@ function showSettings(): void {
     </html>
   `;
 
-  // Проверяем, не открыто ли окно уже
+  // Check whether the window is already open
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     if (settingsWindow.isMinimized()) {
       settingsWindow.restore();
@@ -1156,7 +1156,7 @@ function showSettings(): void {
     return;
   }
 
-  // Создаём окно для настроек
+  // Create the settings window
   const windowSize = { width: 650, height: 700 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   settingsWindow = new BrowserWindow({
@@ -1173,18 +1173,18 @@ function showSettings(): void {
     modal: false,
   });
 
-  // Загружаем HTML-контент
+  // Load the HTML content
   settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-  // Обработка сохранения настроек
-  // Удаляем предыдущие обработчики для этого окна, если они есть
+  // Handle settings saves
+  // Remove any previous handlers for this window
   const handler = async (event: any, newSettings: Partial<Settings>) => {
-    // Проверяем, что событие пришло от нашего окна
+    // Check that the event came from our window
     if (event.sender !== settingsWindow!.webContents) {
       return;
     }
 
-    // Валидация на стороне сервера
+    // Server-side validation
     const validation = validateSettings(newSettings);
     
     if (!validation.valid) {
@@ -1192,15 +1192,15 @@ function showSettings(): void {
       return;
     }
 
-    // Применяем настройки
+    // Apply the settings
     const success = await applySettings(newSettings as Settings);
     
     if (success) {
-      // Удаляем обработчик после успешного сохранения
+      // Remove the handler after a successful save
       ipcMain.removeListener('save-settings', handler);
-      // Закрываем окно настроек
+      // Close the settings window
       settingsWindow!.close();
-      // Показываем системное уведомление после закрытия окна
+      // Show a system notification after the window closes
       setTimeout(() => {
         if (Notification.isSupported()) {
           const notification = new Notification({
@@ -1212,12 +1212,12 @@ function showSettings(): void {
         }
       }, 100); // A short delay to close the window correctly
     } else {
-      // При ошибке показываем сообщение, но не закрываем окно настроек
-      // чтобы пользователь мог исправить данные
-      // Приложение продолжает работать с предыдущими настройками
+      // On error, show a message but keep the settings window open
+      // so the user can correct the values
+      // The app will continue using the previous settings.
       const errorMessage = 'Could not apply the settings. Check the coordinates or city and country. The app will continue using the previous settings.';
       event.sender.send('settings-error', [errorMessage]);
-      // Показываем диалог асинхронно, чтобы не блокировать выполнение
+      // Show the dialog asynchronously so execution is not blocked
       dialog.showMessageBox(settingsWindow!, {
         type: 'error',
         title: 'Error applying settings',
@@ -1231,7 +1231,7 @@ function showSettings(): void {
 
   ipcMain.on('save-settings', handler);
 
-  // Обработчик закрытия окна: очищаем ссылку и удаляем IPC обработчик
+  // Window close handler: clear the reference and remove the IPC handler
   settingsWindow.on('closed', () => {
     ipcMain.removeListener('save-settings', handler);
     settingsWindow = null;
@@ -1239,7 +1239,7 @@ function showSettings(): void {
 }
 
 /**
- * Показывает окно со справочной информацией о приложении
+ * Show the app help window
  */
 function showHelp(): void {
   const html = `
@@ -1348,7 +1348,7 @@ function showHelp(): void {
         .url-link:hover {
           text-decoration: underline;
         }
-        /* Стили для скроллбара */
+        /* Scrollbar styles */
         .content::-webkit-scrollbar {
           width: 10px;
         }
@@ -1396,7 +1396,7 @@ function showHelp(): void {
             <p style="margin: 0; color: #856404; font-weight: 500;"><strong>⚠️ Important:</strong> By default, the temperature is shown for <strong>New York City, United States</strong>. To show the weather for your location, update settings in the dialog "Settings" or edit the file <code>settings.json</code> manually.</p>
           </div>
           
-          <h3>⚙️ The dialog "Settings" (recommended)</h3>
+          <h3>⚙️ Settings dialog (recommended)</h3>
           <p>Instead of editing <code>settings.json</code> you can use the settings dialog:</p>
           <ol>
             <li>Right-click the tray icon</li>
@@ -1453,10 +1453,10 @@ function showHelp(): void {
             <li>The current temperature</li>
             <li>Last update time</li>
             <li>Coordinates (latitude and longitude)</li>
-            <li>the city and country, if available</li>
-            <li> <strong>"Refresh now"</strong> to refresh manually</li>
-            <li> <strong>"Show API errors (N)"</strong> to view error history</li>
-            <li> <strong>"Quit"</strong></li>
+            <li>The city and country, if available</li>
+            <li><strong>"Refresh now"</strong> to refresh manually</li>
+            <li><strong>"Show API errors (N)"</strong> to view error history</li>
+            <li><strong>"Quit"</strong></li>
           </ul>
         </div>
 
@@ -1493,7 +1493,7 @@ function showHelp(): void {
     </html>
   `;
 
-  // Проверяем, не открыто ли окно уже
+  // Check whether the window is already open
   if (helpWindow && !helpWindow.isDestroyed()) {
     if (helpWindow.isMinimized()) {
       helpWindow.restore();
@@ -1503,7 +1503,7 @@ function showHelp(): void {
     return;
   }
 
-  // Создаём окно для отображения справки
+  // Create the help window
   const windowSize = { width: 700, height: 700 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   helpWindow = new BrowserWindow({
@@ -1518,21 +1518,21 @@ function showHelp(): void {
     },
   });
 
-  // Очищаем ссылку при закрытии окна
+  // Clear the reference when the window closes
   helpWindow.on('closed', () => {
     helpWindow = null;
   });
 
-  // Загружаем HTML-контент
+  // Load the HTML content
   helpWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-  // Обработка кликов по ссылкам через webContents
+  // Handle link clicks through webContents
   helpWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
 
-  // Обработка навигации (если пользователь кликнет на ссылку)
+  // Handle navigation (if the user clicks a link)
   helpWindow.webContents.on("will-navigate", (event, url) => {
     event.preventDefault();
     shell.openExternal(url);
@@ -1540,10 +1540,10 @@ function showHelp(): void {
 }
 
 /**
- * Показывает окно с подробной информацией о погоде и прогнозом
+ * Show the detailed weather and forecast window
  */
 async function showWeatherDetails(): Promise<void> {
-  // Проверяем, не открыто ли окно уже - если открыто, закрываем его
+  // If the window is already open, close it
   if (weatherWindow && !weatherWindow.isDestroyed()) {
     weatherWindow.close();
     return;
@@ -1561,7 +1561,7 @@ async function showWeatherDetails(): Promise<void> {
   if (!weatherData) {
     dialog.showMessageBox({
       type: "error",
-      title: "Ошибка",
+      title: "Error",
       message: "Could not load weather data",
       detail: "Try refreshing the data later.",
     });
@@ -1571,7 +1571,7 @@ async function showWeatherDetails(): Promise<void> {
   const locationString = cityName && countryName ? `${cityName}, ${countryName}` : 
                         (LATITUDE !== null && LONGITUDE !== null ? `${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}` : "Unknown");
   
-  // Вспомогательные функции для форматирования
+  // Helper functions for formatting
   const getWindDirection = (degrees: number): string => {
     const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     const index = Math.round(degrees / 45) % 8;
@@ -1587,40 +1587,40 @@ async function showWeatherDetails(): Promise<void> {
     if (speed < 10.8) return "fresh breeze";
     if (speed < 13.9) return "strong wind";
     if (speed < 17.2) return "near gale";
-    if (speed < 20.8) return "очень near gale";
-    if (speed < 24.5) return "шторм";
-    if (speed < 28.5) return "сильный шторм";
-    if (speed < 32.7) return "жестокий шторм";
-    return "ураган";
+    if (speed < 20.8) return "very near gale";
+    if (speed < 24.5) return "storm";
+    if (speed < 28.5) return "strong storm";
+    if (speed < 32.7) return "violent storm";
+    return "hurricane";
   };
   
   const getUVDescription = (uv: number): string => {
-    if (uv < 3) return "Низкий";
-    if (uv < 6) return "Умеренный";
-    if (uv < 8) return "Высокий";
-    if (uv < 11) return "Очень высокий";
-    return "Экстремальный";
+    if (uv < 3) return "Low";
+    if (uv < 6) return "Moderate";
+    if (uv < 8) return "High";
+    if (uv < 11) return "Very high";
+    return "Extreme";
   };
   
   const getComfortLevel = (dewpoint: number, humidity?: number): string => {
-    if (dewpoint < 10) return "Сухо";
-    if (dewpoint < 16) return "Комфортно";
-    if (dewpoint < 18) return "Умеренно";
-    if (dewpoint < 21) return "Влажно";
-    return "Очень влажно";
+    if (dewpoint < 10) return "Dry";
+    if (dewpoint < 16) return "Comfortable";
+    if (dewpoint < 18) return "Moderate";
+    if (dewpoint < 21) return "Humid";
+    return "Very humid";
   };
   
   const formatTime = (timeStr: string): string => {
-    // Показываем время в том же формате, в котором оно пришло от API
-    // Добавляем информацию о таймзоне и UTC offset
+    // Keep the time in the format returned by the API
+    // Add the timezone and UTC offset
     if (weatherData.timezone !== undefined) {
-      // Для OpenWeatherMap timezone - это число (offset в секундах)
-      // Для Open-Meteo timezone - это строка (название таймзоны)
+      // For OpenWeatherMap, timezone is a number (offset in seconds)
+      // For Open-Meteo, timezone is a string (the timezone name)
       let timezoneDisplay = "";
       let utcOffset = "";
       
       if (typeof weatherData.timezone === "number") {
-        // OpenWeatherMap: timezone - это offset в секундах
+        // OpenWeatherMap: timezone is an offset in seconds
         const offsetSeconds = weatherData.timezone;
         const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
         const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
@@ -1628,7 +1628,7 @@ async function showWeatherDetails(): Promise<void> {
         utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
         timezoneDisplay = utcOffset;
       } else if (typeof weatherData.timezone === "string") {
-        // Open-Meteo: timezone - это название таймзоны
+        // Open-Meteo: timezone is the timezone name
         timezoneDisplay = weatherData.timezone;
         if (weatherData.utc_offset_seconds !== undefined) {
           const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
@@ -1653,19 +1653,19 @@ async function showWeatherDetails(): Promise<void> {
     return `${hours}:${minutes.toString().padStart(2, "0")}`;
   };
   
-  // Показываем время в том же формате, в котором оно пришло от API
+  // Keep the time in the format returned by the API
   const timeStr = weatherData.current.time;
   
-  // Форматируем информацию о часовом поясе и UTC offset
+  // Format timezone and UTC offset information
   let timezoneInfo = "";
   if (weatherData.timezone !== undefined) {
-    // Для OpenWeatherMap timezone - это число (offset в секундах)
-    // Для Open-Meteo timezone - это строка (название таймзоны)
+    // For OpenWeatherMap, timezone is a number (offset in seconds)
+    // For Open-Meteo, timezone is a string (the timezone name)
     let timezoneDisplay = "";
     let utcOffset = "";
     
     if (typeof weatherData.timezone === "number") {
-      // OpenWeatherMap: timezone - это offset в секундах
+      // OpenWeatherMap: timezone is an offset in seconds
       const offsetSeconds = weatherData.timezone;
       const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
       const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
@@ -1673,7 +1673,7 @@ async function showWeatherDetails(): Promise<void> {
       utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
       timezoneDisplay = utcOffset;
     } else if (typeof weatherData.timezone === "string") {
-      // Open-Meteo: timezone - это название таймзоны
+      // Open-Meteo: timezone is the timezone name
       timezoneDisplay = weatherData.timezone;
       if (weatherData.utc_offset_seconds !== undefined) {
         const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
@@ -1913,7 +1913,7 @@ async function showWeatherDetails(): Promise<void> {
           <div class="location">📍 ${locationString}</div>
           <div style="margin-top: 8px; font-size: 12px; color: #666;">
             API: ${API_PROVIDER === 'openweathermap' ? 'OpenWeatherMap' : 'Open-Meteo'}
-            ${API_PROVIDER === 'openweathermap' && weatherData.cityId ? ` | <a href="https://old.openweathermap.org/city/${weatherData.cityId}" target="_blank" style="color: #1976d2; text-decoration: none;">Открыть на OpenWeatherMap</a>` : ''}
+            ${API_PROVIDER === 'openweathermap' && weatherData.cityId ? ` | <a href="https://old.openweathermap.org/city/${weatherData.cityId}" target="_blank" style="color: #1976d2; text-decoration: none;">Open in OpenWeatherMap</a>` : ''}
           </div>
         </div>
         
@@ -1928,89 +1928,89 @@ async function showWeatherDetails(): Promise<void> {
           <div class="current-details">
             ${weatherData.current.apparent_temperature !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Ощущается как</div>
+              <div class="current-detail-label">Feels like</div>
               <div class="current-detail-value">${weatherData.current.apparent_temperature}°</div>
             </div>
             ` : ''}
             <div class="current-detail-item">
-              <div class="current-detail-label">Ветер</div>
-              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${weatherData.current.winddirection}°, ${weatherData.current.windspeed} м/с ${getWindDescription(weatherData.current.windspeed)}</div>
+              <div class="current-detail-label">Wind</div>
+              <div class="current-detail-value">${getWindDirection(weatherData.current.winddirection)} ${weatherData.current.winddirection}°, ${weatherData.current.windspeed} m/s ${getWindDescription(weatherData.current.windspeed)}</div>
             </div>
             ${weatherData.current.cloudcover !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Cloudyсть</div>
-              <div class="current-detail-value">${weatherData.current.cloudcover}% ${weatherData.current.cloudcover >= 75 ? "пасмурно" : weatherData.current.cloudcover >= 50 ? "облачно" : "малооблачно"}</div>
+              <div class="current-detail-label">Cloud cover</div>
+              <div class="current-detail-value">${weatherData.current.cloudcover}% ${weatherData.current.cloudcover >= 75 ? "overcast" : weatherData.current.cloudcover >= 50 ? "cloudy" : "mostly clear"}</div>
             </div>
             ` : ''}
             ${weatherData.current.surface_pressure !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Давление</div>
+              <div class="current-detail-label">Pressure</div>
               <div class="current-detail-value">${weatherData.current.surface_pressure} hPa</div>
             </div>
             ` : ''}
             ${weatherData.current.relativehumidity_2m !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Влажность</div>
+              <div class="current-detail-label">Humidity</div>
               <div class="current-detail-value">${weatherData.current.relativehumidity_2m}%</div>
             </div>
             ` : ''}
             ${weatherData.current.visibility !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Видимость</div>
-              <div class="current-detail-value">${weatherData.current.visibility} км</div>
+              <div class="current-detail-label">Visibility</div>
+              <div class="current-detail-value">${weatherData.current.visibility} km</div>
             </div>
             ` : ''}
             ${weatherData.current.dewpoint_2m !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Точка росы</div>
+              <div class="current-detail-label">Dew point</div>
               <div class="current-detail-value">${weatherData.current.dewpoint_2m}°</div>
             </div>
             ` : ''}
             ${weatherData.current.dewpoint_2m !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Комфорт</div>
+              <div class="current-detail-label">Comfort</div>
               <div class="current-detail-value">${getComfortLevel(weatherData.current.dewpoint_2m, weatherData.current.relativehumidity_2m)}</div>
             </div>
             ` : ''}
             ${weatherData.current.precipitation !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Осадки</div>
-              <div class="current-detail-value">${weatherData.current.precipitation > 0 ? weatherData.current.precipitation + " мм" : "нет"}</div>
+              <div class="current-detail-label">Precipitation</div>
+              <div class="current-detail-value">${weatherData.current.precipitation > 0 ? weatherData.current.precipitation + " mm" : "none"}</div>
             </div>
             ` : ''}
             ${weatherData.daily[0]?.sunrise ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Восход</div>
+              <div class="current-detail-label">Sunrise</div>
               <div class="current-detail-value">${formatTime(weatherData.daily[0].sunrise)}</div>
             </div>
             ` : ''}
             ${weatherData.daily[0]?.sunset ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">Закат</div>
+              <div class="current-detail-label">Sunset</div>
               <div class="current-detail-value">${formatTime(weatherData.daily[0].sunset)}</div>
             </div>
             ` : ''}
             ${weatherData.daily[0]?.sunrise && weatherData.daily[0]?.sunset ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">День</div>
+              <div class="current-detail-label">Daylight</div>
               <div class="current-detail-value">${calculateDaylight(weatherData.daily[0].sunrise, weatherData.daily[0].sunset)}</div>
             </div>
             ` : ''}
             ${weatherData.current.uv_index !== undefined ? `
             <div class="current-detail-item">
-              <div class="current-detail-label">УФ индекс</div>
+              <div class="current-detail-label">UV index</div>
               <div class="current-detail-value">${weatherData.current.uv_index} ${getUVDescription(weatherData.current.uv_index)}</div>
             </div>
             ` : ''}
             <div class="current-detail-item">
-              <div class="current-detail-label">Время обновления</div>
+              <div class="current-detail-label">Update time</div>
               <div class="current-detail-value">${timeStr}${timezoneInfo}</div>
             </div>
           </div>
         </div>
         
         <div class="update-time">
-          Данные обновлены: ${timeStr}${timezoneInfo}
+          Data updated: ${timeStr}${timezoneInfo}
         </div>
       </div>
     </body>
@@ -2032,18 +2032,18 @@ async function showWeatherDetails(): Promise<void> {
     resizable: true,
   });
 
-  // Очищаем ссылку при закрытии окна
+  // Clear the reference when the window closes
   weatherWindow.on('closed', () => {
     weatherWindow = null;
   });
 
-  // Обработка кликов по ссылкам через webContents
+  // Handle link clicks through webContents
   weatherWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
 
-  // Обработка навигации (если пользователь кликнет на ссылку)
+  // Handle navigation (if the user clicks a link)
   weatherWindow.webContents.on("will-navigate", (event, url) => {
     event.preventDefault();
     shell.openExternal(url);
@@ -2056,10 +2056,10 @@ async function showWeatherDetails(): Promise<void> {
 }
 
 /**
- * Показывает окно с последними API-запросами
+ * Show the most recent API requests window
  */
 function showApiRequests(): void {
-  // Проверяем, не открыто ли окно уже
+  // Check whether the window is already open
   if (requestWindow && !requestWindow.isDestroyed()) {
     if (requestWindow.isMinimized()) {
       requestWindow.restore();
@@ -2069,14 +2069,14 @@ function showApiRequests(): void {
     return;
   }
 
-  // Форматируем запросы для HTML-отображения
+  // Format requests for display in HTML
   const requestsHtml = apiRequests.length === 0
-    ? '<div style="text-align: center; padding: 40px; color: #666; font-size: 14px;"><p style="margin-bottom: 8px; font-weight: 500;">Запросов не было</p><p style="font-size: 12px; color: #999;">История запросов пуста.</p></div>'
+    ? '<div style="text-align: center; padding: 40px; color: #666; font-size: 14px;"><p style="margin-bottom: 8px; font-weight: 500;">No requests</p><p style="font-size: 12px; color: #999;">The request history is empty.</p></div>'
     : apiRequests
     .slice()
-    .reverse() // Показываем последние запросы первыми
+    .reverse() // Show the most recent requests first
     .map((req, index) => {
-      const timeStr = req.timestamp.toLocaleTimeString("ru-RU", {
+      const timeStr = req.timestamp.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -2091,13 +2091,13 @@ function showApiRequests(): void {
           .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`)
           .join("\n");
         requestHeadersHtml = `<div class="request-section">
-          <div class="request-section-title">Заголовки запроса:</div>
+          <div class="request-section-title">Request headers:</div>
           <pre class="request-pre">${headersStr}</pre>
         </div>`;
       } else {
         requestHeadersHtml = `<div class="request-section">
-          <div class="request-section-title">Заголовки запроса:</div>
-          <pre class="request-pre">(нет заголовков)</pre>
+          <div class="request-section-title">Request headers:</div>
+          <pre class="request-pre">(no headers)</pre>
         </div>`;
       }
       
@@ -2122,7 +2122,7 @@ function showApiRequests(): void {
           .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`)
           .join("\n");
         responseHeadersHtml = `<div class="request-section">
-          <div class="request-section-title">Заголовки ответа:</div>
+          <div class="request-section-title">Response headers:</div>
           <pre class="request-pre">${headersStr}</pre>
         </div>`;
       }
@@ -2131,12 +2131,12 @@ function showApiRequests(): void {
       if (req.responseBody) {
         const bodyStr = escapeHtml(req.responseBody);
         responseBodyHtml = `<div class="request-section">
-          <div class="request-section-title">Тело ответа:</div>
+          <div class="request-section-title">Response body:</div>
           <pre class="request-pre response-body">${bodyStr}</pre>
         </div>`;
       }
       
-      const durationStr = req.duration !== undefined ? ` (${req.duration} мс)` : "";
+      const durationStr = req.duration !== undefined ? ` (${req.duration} ms)` : "";
       
       return `
         <div class="request-item">
@@ -2145,7 +2145,7 @@ function showApiRequests(): void {
             <div class="request-time">[${timeStr}]${durationStr}</div>
             <div class="request-api"><strong>${escapedApi}</strong></div>
             <div class="request-url"><strong>URL:</strong> <a href="${escapedUrl}" class="url-link">${escapedUrl}</a></div>
-            <div class="request-method"><strong>Метод:</strong> ${escapeHtml(req.method)}</div>
+            <div class="request-method"><strong>Method:</strong> ${escapeHtml(req.method)}</div>
             ${requestHeadersHtml}
             ${responseStatusHtml}
             ${responseHeadersHtml}
@@ -2161,7 +2161,7 @@ function showApiRequests(): void {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>API request history (${apiRequests.length} из ${MAX_REQUESTS} максимально хранящихся)</title>
+      <title>API request history (${apiRequests.length} of ${MAX_REQUESTS} maximum stored)</title>
       <style>
         * {
           margin: 0;
@@ -2296,7 +2296,7 @@ function showApiRequests(): void {
     </head>
     <body>
       <div class="header">
-        <h1>API request history (${apiRequests.length} из ${MAX_REQUESTS} максимально хранящихся)</h1>
+        <h1>API request history (${apiRequests.length} of ${MAX_REQUESTS} maximum stored)</h1>
       </div>
       <div class="request-list">
         ${requestsHtml}
@@ -2312,21 +2312,21 @@ function showApiRequests(): void {
     height: windowSize.height,
     x: windowPosition.x,
     y: windowPosition.y,
-    title: `API request history (${apiRequests.length} из ${MAX_REQUESTS})`,
+    title: `API request history (${apiRequests.length} of ${MAX_REQUESTS})`,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
   });
 
-  // Очищаем ссылку при закрытии окна
+  // Clear the reference when the window closes
   requestWindow.on('closed', () => {
     requestWindow = null;
   });
 
   requestWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-  // Обработка кликов по ссылкам
+  // Handle link clicks
   requestWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -2339,10 +2339,10 @@ function showApiRequests(): void {
 }
 
 /**
- * Показывает окно с последними ошибками API (с прокруткой и кликабельными ссылками)
+ * Show the recent API errors window (with scrolling and clickable links)
  */
 function showApiErrors(): void {
-  // Проверяем, не открыто ли окно уже
+  // Check whether the window is already open
   if (errorWindow && !errorWindow.isDestroyed()) {
     if (errorWindow.isMinimized()) {
       errorWindow.restore();
@@ -2352,12 +2352,12 @@ function showApiErrors(): void {
     return;
   }
 
-  // Форматируем ошибки для HTML-отображения
+  // Format errors for display in HTML
   const errorsHtml = apiErrors.length === 0
     ? '<div style="text-align: center; padding: 40px; color: #666; font-size: 14px;"><p style="margin-bottom: 8px; font-weight: 500;">No errors</p><p style="font-size: 12px; color: #999;">All API requests completed successfully.</p></div>'
     : apiErrors
     .map((err, index) => {
-      const timeStr = err.timestamp.toLocaleTimeString("ru-RU", {
+      const timeStr = err.timestamp.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -2382,11 +2382,11 @@ function showApiErrors(): void {
       
       let errorCodeHtml = "";
       if (err.errorCode) {
-        const errorCodeDesc = err.errorCode === "ENOTFOUND" ? " (DNS lookup failed - не удалось найти хост)" :
-                             err.errorCode === "ECONNREFUSED" ? " (Connection refused - соединение отклонено)" :
-                             err.errorCode === "ETIMEDOUT" ? " (Timeout - превышено время ожидания)" :
-                             err.errorCode === "ECONNRESET" ? " (Connection reset - соединение сброшено)" :
-                             err.errorCode === "EAI_AGAIN" ? " (DNS lookup failed - временная ошибка DNS)" :
+        const errorCodeDesc = err.errorCode === "ENOTFOUND" ? " (DNS lookup failed - host could not be found)" :
+                             err.errorCode === "ECONNREFUSED" ? " (Connection refused - connection was refused)" :
+                             err.errorCode === "ETIMEDOUT" ? " (Timeout - request timed out)" :
+                             err.errorCode === "ECONNRESET" ? " (Connection reset - connection was reset)" :
+                             err.errorCode === "EAI_AGAIN" ? " (DNS lookup failed - temporary DNS error)" :
                              "";
         errorCodeHtml = `<div class="error-code"><strong>Error code:</strong> <span class="code-value">${err.errorCode}${errorCodeDesc}</span></div>`;
       }
@@ -2422,7 +2422,7 @@ function showApiErrors(): void {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>API error history (${apiErrors.length} из ${MAX_ERRORS} максимально хранящихся)</title>
+      <title>API error history (${apiErrors.length} of ${MAX_ERRORS} maximum stored)</title>
       <style>
         * {
           margin: 0;
@@ -2538,7 +2538,7 @@ function showApiErrors(): void {
         .url-link:visited {
           color: #7b1fa2;
         }
-        /* Стили для скроллбара */
+        /* Scrollbar styles */
         .error-list::-webkit-scrollbar {
           width: 10px;
         }
@@ -2557,7 +2557,7 @@ function showApiErrors(): void {
     </head>
     <body>
       <div class="header">
-        <h1>API error history (${apiErrors.length} из ${MAX_ERRORS} максимально хранящихся)</h1>
+        <h1>API error history (${apiErrors.length} of ${MAX_ERRORS} maximum stored)</h1>
       </div>
       <div class="error-list">
         ${errorsHtml}
@@ -2566,7 +2566,7 @@ function showApiErrors(): void {
     </html>
   `;
 
-  // Создаём окно для отображения ошибок
+  // Create the error history window
   const windowSize = { width: 800, height: 600 };
   const windowPosition = getWindowPositionOnPrimaryDisplay(windowSize.width, windowSize.height);
   errorWindow = new BrowserWindow({
@@ -2574,28 +2574,28 @@ function showApiErrors(): void {
     height: windowSize.height,
     x: windowPosition.x,
     y: windowPosition.y,
-    title: `API error history (${apiErrors.length} из ${MAX_ERRORS})`,
+    title: `API error history (${apiErrors.length} of ${MAX_ERRORS})`,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
   });
 
-  // Очищаем ссылку при закрытии окна
+  // Clear the reference when the window closes
   errorWindow.on('closed', () => {
     errorWindow = null;
   });
 
-  // Загружаем HTML-контент
+  // Load the HTML content
   errorWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-  // Обработка кликов по ссылкам через webContents
+  // Handle link clicks through webContents
   errorWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
 
-  // Обработка навигации (если пользователь кликнет на ссылку)
+  // Handle navigation (if the user clicks a link)
   errorWindow.webContents.on("will-navigate", (event, url) => {
     event.preventDefault();
     shell.openExternal(url);
@@ -2603,10 +2603,10 @@ function showApiErrors(): void {
 }
 
 /**
- * Получает координаты по названию города и страны через Geocoding API
+ * Look up coordinates for a city and country through the Geocoding API
  */
 async function fetchCoordinatesByCity(city: string, country: string): Promise<{ latitude: number; longitude: number; cityName: string; countryName: string } | null> {
-  // Используем count=10 чтобы получить больше результатов и найти наиболее подходящий
+  // Use count=10 to get more results and find the best match
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&count=10&language=en`;
   console.log({url});
   const startTime = Date.now();
@@ -2614,13 +2614,13 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     const res = await fetch(url);
     const duration = Date.now() - startTime;
     
-    // Получаем заголовки ответа
+    // Get the response headers
     const responseHeaders: Record<string, string> = {};
     res.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
     
-    // Получаем тело ответа
+    // Get the response body
     const responseText = await res.text();
     let responseBody: string | undefined;
     try {
@@ -2632,25 +2632,25 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
-      addApiError("Geocoding API (поиск координат)", error, url, { statusCode: res.status });
-      addApiRequest("Geocoding API (поиск координат)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+      addApiError("Geocoding API (coordinate lookup)", error, url, { statusCode: res.status });
+      addApiRequest("Geocoding API (coordinate lookup)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
     
-    addApiRequest("Geocoding API (поиск координат)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    addApiRequest("Geocoding API (coordinate lookup)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
     
     const data: any = JSON.parse(responseText);
     if (data && data.results && data.results.length > 0) {
-      // Нормализуем названия для сравнения
+      // Normalize names for comparison
       const cityLower = city.toLowerCase().trim();
       const countryLower = country.toLowerCase().trim();
       
-      // Функция для нормализации названия страны (убираем лишние пробелы, приводим к нижнему регистру)
+      // Helper to normalize a country name (trim extra spaces and convert to lowercase)
       const normalizeCountry = (countryName: string): string => {
         return countryName.toLowerCase().trim();
       };
       
-      // Сначала ищем точное совпадение по городу И стране
+      // First, look for an exact match on both city and country
       const exactMatchWithCountry = data.results.find((loc: any) => {
         const locCity = loc.name ? loc.name.toLowerCase().trim() : "";
         const locCountry = loc.country ? normalizeCountry(loc.country) : "";
@@ -2666,12 +2666,12 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
         };
       }
       
-      // Если не нашли точное совпадение по городу и стране, ищем точное совпадение только по городу
+      // If no exact city and country match is found, look for an exact city match
       const exactMatchCity = data.results.find((loc: any) => 
         loc.name && loc.name.toLowerCase().trim() === cityLower
       );
       
-      // Если нашли точное совпадение по городу, используем его, иначе берём первый результат
+      // Use the exact city match if found; otherwise, use the first result
       const location = exactMatchCity || data.results[0];
       
       return {
@@ -2684,38 +2684,38 @@ async function fetchCoordinatesByCity(city: string, country: string): Promise<{ 
     return null;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    // Извлекаем код ошибки, если он есть
+    // Extract the error code, if present
     const errorCode = (err as any)?.code;
-    addApiError("Geocoding API (поиск координат)", error, url, errorCode ? { errorCode } : undefined);
+    addApiError("Geocoding API (coordinate lookup)", error, url, errorCode ? { errorCode } : undefined);
     console.error("Failed to fetch coordinates:", err);
     return null;
   }
 }
 
 /**
- * Получает название города и страны по координатам через Geocoding API
+ * Get the city and country names for coordinates through the Geocoding API
  */
 async function fetchLocationByCoordinates(latitude: number, longitude: number): Promise<{ cityName: string; countryName: string } | null> {
-  // Используем Nominatim (OpenStreetMap) для reverse geocoding, так как Open-Meteo не поддерживает это
-  // Nominatim - бесплатный и не требует API ключа
+  // Use Nominatim (OpenStreetMap) for reverse geocoding because Open-Meteo does not support it
+  // Nominatim is free and does not require an API key
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&accept-language=ru`;
   console.log({url});
   const startTime = Date.now();
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'WeatherApp/1.0' // Nominatim требует User-Agent
+        'User-Agent': 'WeatherApp/1.0' // Nominatim requires a User-Agent
       }
     });
     const duration = Date.now() - startTime;
     
-    // Получаем заголовки ответа
+    // Get the response headers
     const responseHeaders: Record<string, string> = {};
     res.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
     
-    // Получаем тело ответа
+    // Get the response body
     const responseText = await res.text();
     let responseBody: string | undefined;
     try {
@@ -2727,29 +2727,29 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
     
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
-      addApiError("Nominatim API (поиск местоположения)", error, url, { statusCode: res.status });
-      addApiRequest("Nominatim API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+      addApiError("Nominatim API (location lookup)", error, url, { statusCode: res.status });
+      addApiRequest("Nominatim API (location lookup)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
     
-    addApiRequest("Nominatim API (поиск местоположения)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    addApiRequest("Nominatim API (location lookup)", url, "GET", undefined, res.status, responseHeaders, responseBody, duration);
     
     const data: any = JSON.parse(responseText);
     
-    // Проверяем наличие ошибки в ответе
+    // Check whether the response contains an error
     if (data && data.error) {
       const errorMessage = data.error || "Unknown error from API";
       const error = new Error(`API error: ${errorMessage}`);
-      addApiError("Nominatim API (поиск местоположения)", error, url);
+      addApiError("Nominatim API (location lookup)", error, url);
       console.error("API returned error:", errorMessage);
       return null;
     }
     
-    // Nominatim возвращает данные в формате address
+    // Nominatim returns data in the address format
     if (data && data.address) {
       const address = data.address;
-      // Извлекаем название города и страны из адреса
-      // Nominatim может возвращать разные поля в зависимости от типа местоположения
+      // Extract the city and country names from the address
+      // Nominatim may return different fields depending on the location type
       const cityName = address.city || address.town || address.village || address.municipality || address.county || "";
       const countryName = address.country || "";
       
@@ -2761,26 +2761,26 @@ async function fetchLocationByCoordinates(latitude: number, longitude: number): 
       }
     }
     
-    // Если данных нет, это не ошибка - просто нет данных для этих координат
+    // Missing data is not an error; there is simply no data for these coordinates
     console.log("No location found for coordinates:", latitude, longitude);
     return null;
   } catch (err) {
     const duration = Date.now() - startTime;
     const error = err instanceof Error ? err : new Error(String(err));
-    // Извлекаем код ошибки, если он есть
+    // Extract the error code, if present
     const errorCode = (err as any)?.code;
-    addApiError("Nominatim API (поиск местоположения)", error, url, errorCode ? { errorCode } : undefined);
-    addApiRequest("Nominatim API (поиск местоположения)", url, "GET", undefined, undefined, undefined, undefined, duration);
+    addApiError("Nominatim API (location lookup)", error, url, errorCode ? { errorCode } : undefined);
+    addApiRequest("Nominatim API (location lookup)", url, "GET", undefined, undefined, undefined, undefined, duration);
     console.error("Failed to fetch location info:", err);
     return null;
   }
 }
 
 /**
- * Инициализирует координаты и названия местоположения
+ * Initialize coordinates and location names
  */
 async function initializeLocation(): Promise<boolean> {
-  // Если координаты не указаны, но указаны город и страна
+  // If coordinates are not set but a city and country are
   if ((LATITUDE === null || LONGITUDE === null) && CITY && COUNTRY) {
     console.log(`Looking up coordinates for ${CITY}, ${COUNTRY}...`);
     const location = await fetchCoordinatesByCity(CITY, COUNTRY);
@@ -2789,7 +2789,7 @@ async function initializeLocation(): Promise<boolean> {
       LONGITUDE = location.longitude;
       cityName = location.cityName;
       countryName = location.countryName;
-      // Генерируем URL в зависимости от выбранного API провайдера
+      // Generate the URL based on the selected API provider
       if (API_PROVIDER === 'openweathermap' && API_KEY) {
         WEATHER_URL = `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
       } else {
@@ -2803,10 +2803,10 @@ async function initializeLocation(): Promise<boolean> {
       return false;
     }
   }
-  // Если координаты указаны напрямую (в коде или через предыдущий запрос)
+  // If coordinates are specified directly (in code or by a previous request)
   if (LATITUDE !== null && LONGITUDE !== null) {
-    // Всегда обновляем WEATHER_URL при инициализации, чтобы использовать актуальные координаты
-    // Генерируем URL в зависимости от выбранного API провайдера
+    // Always update WEATHER_URL during initialization to use the current coordinates
+    // Generate the URL based on the selected API provider
     if (API_PROVIDER === 'openweathermap' && API_KEY) {
       WEATHER_URL = `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
     } else {
@@ -2814,9 +2814,9 @@ async function initializeLocation(): Promise<boolean> {
     }
     console.log(`Using coordinates: ${LATITUDE}, ${LONGITUDE}`);
     
-    // Получаем название города и страны по координатам
-    // Если используются только координаты (CITY и COUNTRY undefined), всегда получаем названия
-    // Также получаем, если названия еще не были получены
+    // Get the city and country names from the coordinates
+    // If only coordinates are used (CITY and COUNTRY are undefined), always look up the names
+    // Also look them up if the names are not yet available
     if ((CITY === undefined && COUNTRY === undefined) || !cityName || !countryName) {
       const location = await fetchLocationByCoordinates(LATITUDE, LONGITUDE);
       if (location) {
@@ -2829,7 +2829,7 @@ async function initializeLocation(): Promise<boolean> {
   }
   
   const error = new Error("Neither coordinates nor city and country were specified!");
-  addApiError("Инициализация", error);
+  addApiError("Initialization", error);
   console.error("Neither coordinates nor city and country were specified!");
   return false;
 }
@@ -2868,16 +2868,16 @@ interface ExtendedWeatherData {
     temperature: number;
     weathercode: number;
   }>;
-  timezone?: string | number; // Для OpenWeatherMap - число (offset в секундах), для Open-Meteo - строка (название таймзоны)
+  timezone?: string | number; // For OpenWeatherMap, a number (offset in seconds); for Open-Meteo, a string (timezone name)
   utc_offset_seconds?: number;
-  cityId?: number; // City ID для OpenWeatherMap (для ссылки)
+  cityId?: number; // OpenWeatherMap city ID (for the link)
 }
 
 async function fetchWeatherData(): Promise<WeatherData | null> {
   if (!WEATHER_URL) {
-    const error = new Error("WEATHER_URL не инициализирован");
+    const error = new Error("WEATHER_URL has not been initialized");
     addApiError("Weather API", error);
-    console.error("WEATHER_URL не инициализирован");
+    console.error("WEATHER_URL has not been initialized");
     return null;
   }
   
@@ -2886,13 +2886,13 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     const res = await fetch(WEATHER_URL);
     const duration = Date.now() - startTime;
     
-    // Получаем заголовки ответа
+    // Get the response headers
     const responseHeaders: Record<string, string> = {};
     res.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
     
-    // Получаем тело ответа
+    // Get the response body
     const responseText = await res.text();
     let responseBody: string | undefined;
     try {
@@ -2913,23 +2913,23 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
     
     const data: any = JSON.parse(responseText);
     
-    // Обрабатываем ответ в зависимости от API провайдера
+    // Process the response based on the API provider
     if (API_PROVIDER === 'openweathermap') {
-      // OpenWeatherMap API формат
+      // OpenWeatherMap API response format
       if (data && data.main && typeof data.main.temp === "number") {
-        // Конвертируем weather code из OpenWeatherMap в формат WMO
+        // Convert the OpenWeatherMap weather code to the WMO format
         const owmCode = data.weather && data.weather[0] && typeof data.weather[0].id === "number" 
           ? data.weather[0].id 
-          : 800; // По умолчанию ясно (800 = Clear sky в OpenWeatherMap)
+          : 800; // Clear by default (800 = Clear sky in OpenWeatherMap)
         const weathercode = convertOpenWeatherMapToWMO(owmCode);
-        console.log(`OpenWeatherMap: код ${owmCode} конвертирован в WMO ${weathercode}`);
+        console.log(`OpenWeatherMap: code ${owmCode} converted to WMO ${weathercode}`);
         return {
           temperature: data.main.temp,
           weathercode: weathercode
         };
       }
     } else {
-      // Open-Meteo API формат
+      // Open-Meteo API response format
       if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
         const weathercode = typeof data.current_weather.weathercode === "number" 
           ? data.current_weather.weathercode 
@@ -2947,7 +2947,7 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
   } catch (err) {
     const duration = Date.now() - startTime;
     const error = err instanceof Error ? err : new Error(String(err));
-    // Извлекаем код ошибки, если он есть
+    // Extract the error code, if present
     const errorCode = (err as any)?.code;
     addApiError("Weather API", error, WEATHER_URL, errorCode ? { errorCode } : undefined);
     addApiRequest("Weather API", WEATHER_URL, "GET", undefined, undefined, undefined, undefined, duration);
@@ -2957,30 +2957,30 @@ async function fetchWeatherData(): Promise<WeatherData | null> {
 }
 
 /**
- * Получает расширенные данные о погоде с прогнозом
+ * Get extended weather data and forecast
  */
 async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
   if (LATITUDE === null || LONGITUDE === null) {
     return null;
   }
   
-  // URL для получения расширенных данных в зависимости от API провайдера
+  // URL for extended data, based on the API provider
   let extendedUrl: string;
   let currentWeatherUrl: string | null = null;
   if (API_PROVIDER === 'openweathermap' && API_KEY) {
-    // Для OpenWeatherMap используем ТОЛЬКО текущую погоду (/data/2.5/weather)
-    // НЕ используем /forecast API
+    // For OpenWeatherMap, use ONLY current weather (/data/2.5/weather)
+    // Do NOT use the /forecast API
     currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=metric`;
-    extendedUrl = ""; // Не используется для OpenWeatherMap
+    extendedUrl = ""; // Not used for OpenWeatherMap
   } else {
-    // Open-Meteo API: расширенные данные с прогнозом на 7 дней и почасовым прогнозом на сегодня
-    // Включаем все доступные параметры: feels like, облачность, давление, влажность, точка росы, осадки, УФ индекс
+    // Open-Meteo API: extended data with a 7-day forecast and hourly forecast for today
+    // Include all available parameters: feels like, cloud cover, pressure, humidity, dew point, precipitation, and UV index
     extendedUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&hourly=temperature_2m,weathercode,apparent_temperature,cloudcover,pressure_msl,relativehumidity_2m,dewpoint_2m,precipitation,uv_index&current=apparent_temperature,cloudcover,surface_pressure,relativehumidity_2m,dewpoint_2m,precipitation,uv_index,visibility&windspeed_unit=ms&timezone=auto&forecast_days=7`;
   }
   
   const startTime = Date.now();
   try {
-    // Для OpenWeatherMap получаем только текущую погоду
+    // For OpenWeatherMap, retrieve current weather only
     let currentWeatherData: any = null;
     if (API_PROVIDER === 'openweathermap' && currentWeatherUrl) {
       try {
@@ -3004,22 +3004,22 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         
         if (currentRes.ok) {
           currentWeatherData = JSON.parse(currentText);
-          addApiRequest("Weather API (текущая погода)", currentWeatherUrl, "GET", undefined, currentRes.status, currentResponseHeaders, currentResponseBody, currentDuration);
+          addApiRequest("Weather API (current weather)", currentWeatherUrl, "GET", undefined, currentRes.status, currentResponseHeaders, currentResponseBody, currentDuration);
         } else {
           const error = new Error(`HTTP error ${currentRes.status} ${currentRes.statusText}`);
-          addApiError("Weather API (текущая погода)", error, currentWeatherUrl, { statusCode: currentRes.status });
-          addApiRequest("Weather API (текущая погода)", currentWeatherUrl, "GET", undefined, currentRes.status, currentResponseHeaders, currentResponseBody, currentDuration);
+          addApiError("Weather API (current weather)", error, currentWeatherUrl, { statusCode: currentRes.status });
+          addApiRequest("Weather API (current weather)", currentWeatherUrl, "GET", undefined, currentRes.status, currentResponseHeaders, currentResponseBody, currentDuration);
           console.error("Could not retrieve current weather from OpenWeatherMap");
           return null;
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
-        addApiError("Weather API (текущая погода)", error, currentWeatherUrl);
+        addApiError("Weather API (current weather)", error, currentWeatherUrl);
         console.error("Error retrieving current weather from OpenWeatherMap:", err);
         return null;
       }
       
-      // Для OpenWeatherMap возвращаем только текущие данные, без прогноза
+      // For OpenWeatherMap, return current data only, without a forecast
       if (!currentWeatherData) {
         console.error("Could not retrieve current weather from OpenWeatherMap /weather API");
         return null;
@@ -3030,15 +3030,15 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
       const currentWeather = current.weather && current.weather[0] ? current.weather[0] : {};
       const currentSys = current.sys || {};
       
-      // Конвертируем текущий код погоды из OpenWeatherMap в WMO
+      // Convert the current OpenWeatherMap weather code to WMO
       const currentOwmCode = currentWeather.id || 800;
       const currentWmoCode = convertOpenWeatherMapToWMO(currentOwmCode);
       
-      // Конвертируем sunrise и sunset из Unix timestamp в ISO строку
+      // Convert sunrise and sunset from Unix timestamps to ISO strings
       const sunrise = currentSys.sunrise ? new Date(currentSys.sunrise * 1000).toISOString() : undefined;
       const sunset = currentSys.sunset ? new Date(currentSys.sunset * 1000).toISOString() : undefined;
       
-      // Создаем daily массив с восходом и закатом для отображения
+      // Create a daily array with sunrise and sunset for display
       const dailyWithSun: Array<{ date: string; temperature_max: number; temperature_min: number; weathercode: number; sunrise?: string; sunset?: string }> = [];
       if (sunrise || sunset) {
         const today = new Date();
@@ -3062,32 +3062,32 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           time: current.dt ? new Date(current.dt * 1000).toISOString() : new Date().toISOString(),
           apparent_temperature: currentMain.feels_like,
           cloudcover: current.clouds && typeof current.clouds.all === "number" ? current.clouds.all : undefined,
-          surface_pressure: currentMain.pressure ? currentMain.pressure : undefined, // OpenWeatherMap возвращает давление в hPa
+          surface_pressure: currentMain.pressure ? currentMain.pressure : undefined, // OpenWeatherMap returns pressure in hPa
           relativehumidity_2m: currentMain.humidity,
-          dewpoint_2m: undefined, // OpenWeatherMap не предоставляет точку росы напрямую
+          dewpoint_2m: undefined, // OpenWeatherMap does not provide dew point directly
           precipitation: current.rain ? (current.rain['3h'] || 0) : undefined,
-          uv_index: undefined, // OpenWeatherMap не предоставляет UV индекс в базовом API
-          visibility: current.visibility ? current.visibility / 1000 : undefined, // Конвертируем из метров в километры
+          uv_index: undefined, // OpenWeatherMap does not provide a UV index in the basic API
+          visibility: current.visibility ? current.visibility / 1000 : undefined, // Convert from meters to kilometers
         },
-        daily: dailyWithSun, // Добавляем восход и закат для отображения
-        hourly: [], // Нет прогноза для OpenWeatherMap
+        daily: dailyWithSun, // Add sunrise and sunset for display
+        hourly: [], // No forecast is available from OpenWeatherMap
         timezone: current.timezone ? current.timezone : undefined,
         utc_offset_seconds: undefined,
-        cityId: current.id, // Сохраняем city ID для ссылки на OpenWeatherMap
+        cityId: current.id, // Save the city ID for the OpenWeatherMap link
       };
     }
     
-    // Для Open-Meteo делаем запрос к extendedUrl
+    // Make a request to extendedUrl for Open-Meteo
     const res = await fetch(extendedUrl);
     const duration = Date.now() - startTime;
     
-    // Получаем заголовки ответа
+    // Get the response headers
     const responseHeaders: Record<string, string> = {};
     res.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
     
-    // Получаем тело ответа
+    // Get the response body
     const responseText = await res.text();
     let responseBody: string | undefined;
     try {
@@ -3099,18 +3099,18 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     
     if (!res.ok) {
       const error = new Error(`HTTP error ${res.status} ${res.statusText}`);
-      addApiError("Weather API (расширенные данные)", error, extendedUrl, { statusCode: res.status });
-      addApiRequest("Weather API (расширенные данные)", extendedUrl, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+      addApiError("Weather API (extended data)", error, extendedUrl, { statusCode: res.status });
+      addApiRequest("Weather API (extended data)", extendedUrl, "GET", undefined, res.status, responseHeaders, responseBody, duration);
       return null;
     }
     
-    addApiRequest("Weather API (расширенные данные)", extendedUrl, "GET", undefined, res.status, responseHeaders, responseBody, duration);
+    addApiRequest("Weather API (extended data)", extendedUrl, "GET", undefined, res.status, responseHeaders, responseBody, duration);
     
     const data: any = JSON.parse(responseText);
     
-    // Обрабатываем ответ Open-Meteo API
+    // Process the Open-Meteo API response
     
-    // Open-Meteo API формат
+    // Open-Meteo API response format
     if (data && data.current_weather && data.daily) {
       const dailyForecast = [];
       for (let i = 0; i < Math.min(7, data.daily.time.length); i++) {
@@ -3124,7 +3124,7 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         });
       }
       
-      // Обрабатываем почасовые данные на сегодня (только будущие часы)
+      // Process today's hourly data (future hours only)
       const hourlyForecast: Array<{ time: string; temperature: number; weathercode: number }> = [];
       if (data.hourly && data.hourly.time && data.hourly.temperature_2m && data.hourly.weathercode) {
         const now = new Date();
@@ -3135,7 +3135,7 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
           const hourTime = new Date(data.hourly.time[i]);
           const hourDateStr = hourTime.toISOString().split('T')[0];
           
-          // Берем только данные на сегодня и только будущие часы
+          // Use only today's data and future hours
           if (hourDateStr === todayDateStr && hourTime > now) {
             hourlyForecast.push({
               time: data.hourly.time[i],
@@ -3146,7 +3146,7 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
         }
       }
       
-      // Получаем текущие значения ТОЛЬКО из current, НЕ используем данные из прогноза
+      // Get current values ONLY from current; do NOT use forecast data
       const currentData = data.current || {};
       const currentTime = data.current_weather?.time || new Date().toISOString();
       
@@ -3177,80 +3177,80 @@ async function fetchExtendedWeatherData(): Promise<ExtendedWeatherData | null> {
     const duration = Date.now() - startTime;
     const error = err instanceof Error ? err : new Error(String(err));
     const errorCode = (err as any)?.code;
-    addApiError("Weather API (расширенные данные)", error, extendedUrl, errorCode ? { errorCode } : undefined);
-    addApiRequest("Weather API (расширенные данные)", extendedUrl, "GET", undefined, undefined, undefined, undefined, duration);
+    addApiError("Weather API (extended data)", error, extendedUrl, errorCode ? { errorCode } : undefined);
+    addApiRequest("Weather API (extended data)", extendedUrl, "GET", undefined, undefined, undefined, undefined, duration);
     console.error("Failed to fetch extended weather:", err);
     return null;
   }
 }
 
 /**
- * Создаёт PNG-иконку с текстом температуры через canvas.
- * По аналогии с рабочим примером из другого проекта.
+ * Create a PNG icon with temperature text using canvas.
+ * Based on a working example from another project.
  */
 function createTemperatureIcon(text: string): NativeImage {
-  // Увеличиваем размер для лучшего качества и видимости текста
-  const size = 32; // Увеличил размер canvas
+  // Increase the size for better quality and text visibility
+  const size = 32; // Increased canvas size
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
 
-  // Прозрачный фон (не рисуем фон, canvas по умолчанию прозрачный)
-  // Определяем цвет текста в зависимости от состояния
+  // Transparent background (no background is drawn; canvas is transparent by default)
+  // Choose the text color based on the state
   let textColor: string;
 
   if (text === "--" || text === "NA") {
-    // Прочерк или ошибка: светло-серый
+    // Dash or error: light gray
     textColor = "#999999";
   } else {
-    // Активная температура: темно-серый
+    // Active temperature: dark gray
     textColor = "#424242";
   }
 
-  // Settings текста
+  // Text settings
   ctx.fillStyle = textColor;
-  // Если текст больше 2 символов (например "-13°"), уменьшаем размер шрифта
+  // If the text is longer than two characters (for example, "-13°"), reduce the font size
   const textLength = text.length;
   let fontSizeMultiplier = isWindows ? 0.5 : 0.75;
   if (textLength > 2) {
-    // Уменьшаем размер шрифта для длинных текстов
-    fontSizeMultiplier *= 0.75; // Уменьшаем на 25%
+    // Reduce the font size for longer text
+    fontSizeMultiplier *= 0.75; // Reduce by 25%
   }
   const fontSize = size * fontSizeMultiplier;
-  ctx.font = `bold ${fontSize}px Arial`; // Увеличил размер шрифта пропорционально размеру canvas
+  ctx.font = `bold ${fontSize}px Arial`; // Increased font size in proportion to the canvas size
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   
-  // Рисуем текст по центру
+  // Draw the text centered
   const textX = size / 2;
   const textY = size / 2;
   ctx.fillText(text, textX, textY);
 
-  // Конвертируем canvas в buffer
+  // Convert the canvas to a buffer
   const buffer = canvas.toBuffer("image/png");
   
-  // Отладочный вывод и сохранение тестового fileа
-  console.log(`Created icon for "${text}" (размер canvas: ${size}x${size})`);
+  // Debug output and save the test file
+  console.log(`Created icon for "${text}" (canvas size: ${size}x${size})`);
   
-  // // Сохраняем тестовый file для отладки (можно удалить позже)
+  // // Save a test file for debugging (can be removed later)
   // try {
   //   const testFile = path.join(os.tmpdir(), `weather-icon-${text.replace(/[^a-zA-Z0-9]/g, "_")}.png`);
   //   fs.writeFileSync(testFile, buffer);
-  //   console.log(`Тестовый file сохранён: ${testFile}`);
+  //   console.log(`Test file saved: ${testFile}`);
   // } catch (e) {
-  //   console.warn("Не удалось сохранить тестовый file:", e);
+  //   console.warn("Could not save the test file:", e);
   // }
   
   return nativeImage.createFromBuffer(buffer);
 }
 
 function createBaseIcon(): NativeImage {
-  // Базовая иконка до первой загрузки температуры
+  // Base icon shown before the first temperature is loaded
   return createTemperatureIcon("--");
 }
 
 /**
- * Конвертирует код погоды OpenWeatherMap в WMO код
- * OpenWeatherMap использует свои коды (200-804), которые нужно конвертировать в WMO (0-99)
+ * Convert an OpenWeatherMap weather code to WMO
+ * OpenWeatherMap uses its own codes (200–804), which must be converted to WMO codes (0–99)
  */
 function convertOpenWeatherMapToWMO(owmCode: number): number {
   // Thunderstorm (Thunderstorm): 200-232 -> WMO 95-99
@@ -3261,7 +3261,7 @@ function convertOpenWeatherMapToWMO(owmCode: number): number {
     return 95; // Thunderstorm
   }
   
-  // Морось (Drizzle): 300-321 -> WMO 51-55
+  // Drizzle: 300-321 -> WMO 51-55
   if (owmCode >= 300 && owmCode <= 321) {
     if (owmCode >= 320) return 55; // Heavy intensity drizzle
     if (owmCode >= 314) return 54; // Dense intensity drizzle
@@ -3291,7 +3291,7 @@ function convertOpenWeatherMapToWMO(owmCode: number): number {
     return 71; // Light snow
   }
   
-  // Атмосферные явления (туман и т.д.): 701-781 -> WMO 45-48
+  // Atmospheric conditions (fog, etc.): 701-781 -> WMO 45-48
   if (owmCode >= 701 && owmCode <= 781) {
     if (owmCode >= 771) return 99; // Squall
     if (owmCode >= 762) return 48; // Volcanic ash
@@ -3302,20 +3302,20 @@ function convertOpenWeatherMapToWMO(owmCode: number): number {
     return 45; // Mist
   }
   
-  // Clear и облачность: 800-804 -> WMO 0-3
+  // Clear and cloud cover: 800-804 -> WMO 0-3
   if (owmCode === 800) return 0; // Clear sky
   if (owmCode === 801) return 1; // Few clouds
   if (owmCode === 802) return 2; // Scattered clouds
   if (owmCode === 803) return 2; // Broken clouds
   if (owmCode === 804) return 3; // Overcast clouds
   
-  // Если код не распознан, возвращаем 0 (ясно) как значение по умолчанию
-  console.warn(`Unknown OpenWeatherMap code: ${owmCode}, используем WMO 0 (ясно)`);
+  // If the code is not recognized, return 0 (clear) as the default
+  console.warn(`Unknown OpenWeatherMap code: ${owmCode}, using WMO 0 (clear)`);
   return 0;
 }
 
 /**
- * Получает описание погодных условий по weathercode (WMO Weather interpretation codes)
+ * Get a weather description from weathercode (WMO weather interpretation codes)
  */
 function getWeatherDescription(weathercode: number): string {
   if (weathercode === 0) return "Clear";
@@ -3332,65 +3332,65 @@ function getWeatherDescription(weathercode: number): string {
 }
 
 /**
- * Получает emoji для погодных условий на основе weathercode
+ * Get a weather emoji from weathercode
  */
 function getWeatherEmoji(weathercode: number): string {
-  // Маппинг WMO Weather interpretation codes к emoji
+  // Mapping of WMO weather interpretation codes to emoji
   if (weathercode === 0) {
-    // Clear sky - ясно
+    // Clear sky
     return "☀️";
   } else if (weathercode === 1) {
-    // Mainly clear - преимущественно ясно
+    // Mainly clear
     return "🌤️";
   } else if (weathercode === 2) {
-    // Partly cloudy - переменная облачность
+    // Partly cloudy
     return "⛅";
   } else if (weathercode === 3) {
-    // Overcast - пасмурно
+    // Overcast
     return "☁️";
   } else if (weathercode >= 45 && weathercode <= 48) {
-    // Fog - туман
+    // Fog
     return "🌫️";
   } else if (weathercode >= 51 && weathercode <= 55) {
-    // Drizzle - морось
+    // Drizzle
     return "🌦️";
   } else if (weathercode >= 56 && weathercode <= 57) {
-    // Freezing drizzle - ледяная морось
+    // Freezing drizzle
     return "🌨️";
   } else if (weathercode >= 61 && weathercode <= 65) {
-    // Rain - дождь
+    // Rain
     return "🌧️";
   } else if (weathercode >= 66 && weathercode <= 67) {
-    // Freezing rain - ледяной дождь
+    // Freezing rain
     return "🌨️";
   } else if (weathercode >= 71 && weathercode <= 77) {
-    // Snow - снег
+    // Snow
     return "❄️";
   } else if (weathercode >= 80 && weathercode <= 82) {
-    // Rain showers - ливень
+    // Rain showers
     return "🌦️";
   } else if (weathercode >= 85 && weathercode <= 86) {
-    // Snow showers - снегопад
+    // Snow showers
     return "🌨️";
   } else if (weathercode >= 95 && weathercode <= 99) {
-    // Thunderstorm - гроза
+    // Thunderstorm
     return "⛈️";
   } else {
-    // Неизвестный код
+    // Unknown code
     return "❓";
   }
 }
 
-// Кэш для иконок emoji
+// Emoji icon cache
 let emojiIconCache: Map<number, NativeImage> = new Map();
 let emojiCacheInitialized = false;
 
 /**
- * Инициализирует кэш цветных emoji используя BrowserWindow
- * Кэш используется только на Linux
+ * Initialize the color emoji cache using BrowserWindow
+ * The cache is only used on Linux
  */
 async function initializeEmojiCache(): Promise<void> {
-  // Используем кэш только на Linux
+  // Use the cache only on Linux
   if (!isLinux) {
     emojiCacheInitialized = true;
     return;
@@ -3398,12 +3398,12 @@ async function initializeEmojiCache(): Promise<void> {
   
   if (emojiCacheInitialized) return;
   
-  // Используем больший размер для лучшего качества, затем масштабируем
-  const renderSize = 64; // Большой размер для качественного рендеринга
-  const targetSize = isWindows ? 16 : 32; // Финальный размер иконки
+  // Use a larger size for better quality, then scale down
+  const renderSize = 64; // Large size for high-quality rendering
+  const targetSize = isWindows ? 16 : 32; // Final icon size
   const weatherCodes = [0, 1, 2, 3, 45, 51, 56, 61, 66, 71, 80, 85, 95];
   
-  // Создаём временное скрытое окно для рендеринга цветных emoji
+  // Create a temporary hidden window to render color emoji
   const tempWindow = new BrowserWindow({
     width: renderSize,
     height: renderSize,
@@ -3420,7 +3420,7 @@ async function initializeEmojiCache(): Promise<void> {
   for (const code of weatherCodes) {
     const emoji = getWeatherEmoji(code);
     
-    // HTML для отображения emoji
+    // HTML for displaying emoji
     const html = `
       <!DOCTYPE html>
       <html>
@@ -3449,7 +3449,7 @@ async function initializeEmojiCache(): Promise<void> {
       tempWindow.webContents.once("did-finish-load", () => {
         setTimeout(() => {
           tempWindow.capturePage().then((image) => {
-            // Масштабируем изображение до нужного размера для лучшего качества
+            // Scale the image to the required size for better quality
             const scaledImage = image.resize({
               width: targetSize,
               height: targetSize,
@@ -3458,9 +3458,9 @@ async function initializeEmojiCache(): Promise<void> {
             emojiIconCache.set(code, scaledImage);
             resolve();
           }).catch(() => {
-            resolve(); // Пропускаем если не удалось
+            resolve(); // Skip if it fails
           });
-        }, 100); // Увеличиваем задержку для Windows
+        }, 100); // Increase the delay for Windows
       });
     });
   }
@@ -3470,20 +3470,20 @@ async function initializeEmojiCache(): Promise<void> {
 }
 
 /**
- * Создаёт иконку погодных условий на основе weathercode, используя цветные emoji
+ * Create a weather conditions icon from weathercode using color emoji
  */
 function createWeatherIcon(weathercode: number): NativeImage {
   const targetSize = 32;
   
-  // Проверяем кэш цветных emoji только на Linux
+  // Check the color emoji cache only on Linux
   if (isLinux && emojiIconCache.has(weathercode)) {
     const cachedImage = emojiIconCache.get(weathercode)!;
-    // Убеждаемся, что размер правильный
+    // Make sure the size is correct
     const size = cachedImage.getSize();
     if (size.width === targetSize && size.height === targetSize) {
       return cachedImage;
     }
-    // Масштабируем если размер не совпадает
+    // Scale if the size does not match
     return cachedImage.resize({
       width: targetSize,
       height: targetSize,
@@ -3491,12 +3491,12 @@ function createWeatherIcon(weathercode: number): NativeImage {
     });
   }
   
-  // Fallback: используем canvas с увеличенным размером для лучшего качества на Windows
-  const renderSize = isWindows ? 32 : targetSize; // Рендерим в большем размере для Windows
+  // Fallback: use a larger canvas for better quality on Windows
+  const renderSize = isWindows ? 32 : targetSize; // Render at a larger size on Windows
   const canvas = createCanvas(renderSize, renderSize);
   const ctx = canvas.getContext("2d");
   
-  // Пробуем использовать системные шрифты с поддержкой emoji
+  // Try system fonts that support emoji
   const platform = os.platform();
   let fontFamily = "Arial";
   if (platform === "darwin") {
@@ -3507,7 +3507,7 @@ function createWeatherIcon(weathercode: number): NativeImage {
     fontFamily = "Noto Color Emoji";
   }
   
-  // Используем больший размер шрифта для лучшего качества
+  // Use a larger font size for better quality
   const fontSize = renderSize * 0.75;
   ctx.font = `bold ${fontSize}px ${fontFamily}`;
   ctx.textAlign = "center";
@@ -3515,13 +3515,13 @@ function createWeatherIcon(weathercode: number): NativeImage {
   
   const emoji = getWeatherEmoji(weathercode);
   
-  // Рисуем emoji по центру
+  // Draw the emoji centered
   ctx.fillText(emoji, renderSize / 2, renderSize / 2);
 
   const buffer = canvas.toBuffer("image/png");
   let image = nativeImage.createFromBuffer(buffer);
   
-  // Масштабируем до нужного размера для Windows
+  // Scale to the required size for Windows
   if (isWindows && renderSize !== targetSize) {
     image = image.resize({
       width: targetSize,
@@ -3540,27 +3540,27 @@ async function updateTrayTemperature() {
   const temp = weatherData?.temperature ?? null;
   const weathercode = weatherData?.weathercode ?? 0;
   
-  // Полная температура без округления для tooltip, меню и окна подробной информации
+  // Full temperature without rounding for the tooltip, menu, and detailed information window
   const fullLabel = temp !== null ? `${temp} °C` : "N/A";
   
-  // Обновляем время последнего успешного обновления, если температура получена успешно
+  // Update the last successful refresh time when temperature retrieval succeeds
   if (temp !== null) {
     lastUpdateTime = new Date();
   }
 
-  // Короткая надпись для самой иконки (чтобы влезала в небольшой размер) - с округлением
+  // Short rounded label for the icon so it fits at a small size
   const shortLabel =
     temp !== null ? `${Math.round(temp)}°` : "NA";
 
-  // Обновляем первую иконку: рисуем температуру как текст
+  // Update the first icon: draw the temperature as text
   const iconWithTemp = createTemperatureIcon(shortLabel);
   tray.setImage(iconWithTemp);
 
-  // Обновляем вторую иконку: рисуем погодные условия
+  // Update the second icon: draw the weather conditions
   const weatherIcon = createWeatherIcon(weathercode);
   weatherTray.setImage(weatherIcon);
   
-  // Форматируем время последнего обновления с секундами
+  // Format the last update time with seconds
   let timeString = "";
   if (lastUpdateTime) {
     const hours = lastUpdateTime.getHours().toString().padStart(2, "0");
@@ -3569,21 +3569,21 @@ async function updateTrayTemperature() {
     timeString = ` (updated: ${hours}:${minutes}:${seconds})`;
   }
 
-  // Tooltip при наведении для обеих иконок (одинаковый текст) - полные данные без округления
+  // Hover tooltip for both icons (same text), with full values and no rounding
   const locationString = cityName && countryName ? `${cityName}, ${countryName}\n` : "";
   const weatherDescription = getWeatherDescription(weathercode);
   const tooltipText = `${locationString}Temperature: ${fullLabel}\nWeather: ${weatherDescription}${timeString}`;
   tray.setToolTip(tooltipText);
   weatherTray.setToolTip(tooltipText);
 
-  // Попытка отобразить текст прямо в трее (полноценно работает в macOS).
+  // Try to display text directly in the tray (fully supported on macOS).
   try {
     tray.setTitle(fullLabel);
   } catch {
-    // На Linux/Windows может быть проигнорировано.
+    // May be ignored on Linux/Windows.
   }
 
-  // Формируем пункты меню для первой иконки (температура) - полные данные без округления
+  // Create menu items for the first icon (temperature), with full values and no rounding
   const menuItems: any[] = [
     {
       label: `Current temperature: ${fullLabel}`,
@@ -3596,7 +3596,7 @@ async function updateTrayTemperature() {
     { type: "separator" },
   ];
 
-  // Добавляем время последнего обновления, если оно есть
+  // Add the last update time, if available
   if (lastUpdateTime) {
     const hours = lastUpdateTime.getHours().toString().padStart(2, "0");
     const minutes = lastUpdateTime.getMinutes().toString().padStart(2, "0");
@@ -3608,7 +3608,7 @@ async function updateTrayTemperature() {
     menuItems.push({ type: "separator" });
   }
 
-  // Добавляем координаты, если они определены
+  // Add coordinates, if available
   if (LATITUDE !== null && LONGITUDE !== null) {
     menuItems.push({
       label: `Coordinates: ${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}`,
@@ -3625,7 +3625,7 @@ async function updateTrayTemperature() {
     menuItems.push({ type: "separator" });
   }
 
-  // Добавляем город и страну, если они доступны
+  // Add city and country, if available
   if (cityName && countryName) {
     menuItems.push({
       label: `City: ${cityName}`,
@@ -3638,7 +3638,7 @@ async function updateTrayTemperature() {
     menuItems.push({ type: "separator" });
   }
 
-  // Добавляем действия
+  // Add actions
   menuItems.push({
     label: "Refresh now",
     click: () => {
@@ -3691,7 +3691,7 @@ async function updateTrayTemperature() {
   const contextMenu = Menu.buildFromTemplate(menuItems);
   tray.setContextMenu(contextMenu);
 
-  // Создаём такое же меню для второй иконки (погодные условия)
+  // Create the same menu for the second icon (weather conditions)
   const weatherMenuItems: any[] = [
     {
       label: `Weather: ${getWeatherDescription(weathercode)}`,
@@ -3704,7 +3704,7 @@ async function updateTrayTemperature() {
     { type: "separator" },
   ];
 
-  // Добавляем время последнего обновления, если оно есть
+  // Add the last update time, if available
   if (lastUpdateTime) {
     const hours = lastUpdateTime.getHours().toString().padStart(2, "0");
     const minutes = lastUpdateTime.getMinutes().toString().padStart(2, "0");
@@ -3716,7 +3716,7 @@ async function updateTrayTemperature() {
     weatherMenuItems.push({ type: "separator" });
   }
 
-  // Добавляем координаты, если они определены
+  // Add coordinates, if available
   if (LATITUDE !== null && LONGITUDE !== null) {
     weatherMenuItems.push({
       label: `Coordinates: ${LATITUDE.toFixed(4)}, ${LONGITUDE.toFixed(4)}`,
@@ -3725,7 +3725,7 @@ async function updateTrayTemperature() {
     weatherMenuItems.push({ type: "separator" });
   }
 
-  // Добавляем город и страну, если они доступны
+  // Add city and country, if available
   if (cityName && countryName) {
     weatherMenuItems.push({
       label: `City: ${cityName}`,
@@ -3738,7 +3738,7 @@ async function updateTrayTemperature() {
     weatherMenuItems.push({ type: "separator" });
   }
 
-  // Добавляем действия
+  // Add actions
   weatherMenuItems.push({
     label: "Refresh now",
     click: () => {
@@ -3793,7 +3793,7 @@ async function updateTrayTemperature() {
 }
 
 async function createTray() {
-  // Сначала инициализируем местоположение
+  // Initialize the location first
   const initialized = await initializeLocation();
   if (!initialized) {
     console.error("Could not initialize the location. The app was not started.");
@@ -3801,76 +3801,76 @@ async function createTray() {
     return;
   }
 
-  // Создаём первую иконку (температура)
+  // Create the first icon (temperature)
   const baseIcon = createBaseIcon();
   tray = new Tray(baseIcon);
   
-  // Обработчик клика левой кнопкой мыши для первой иконки
+  // Left-click handler for the first icon
   tray.on('click', () => {
     void showWeatherDetails();
   });
 
-  // Создаём вторую иконку (погодные условия)
-  const baseWeatherIcon = createWeatherIcon(0); // Начальная иконка - ясно
+  // Create the second icon (weather conditions)
+  const baseWeatherIcon = createWeatherIcon(0); // Initial icon: clear
   weatherTray = new Tray(baseWeatherIcon);
   
-  // Обработчик клика левой кнопкой мыши для второй иконки
+  // Left-click handler for the second icon
   weatherTray.on('click', () => {
     void showWeatherDetails();
   });
 
   void updateTrayTemperature();
 
-  // Обновление с интервалом из настроек
+  // Refresh at the interval specified in settings
   const updateIntervalMs = UPDATE_INTERVAL_SECONDS * 1000;
-  console.log(`Temperature update interval: ${UPDATE_INTERVAL_SECONDS} секунд (${updateIntervalMs} мс)`);
+  console.log(`Temperature update interval: ${UPDATE_INTERVAL_SECONDS} seconds (${updateIntervalMs} ms)`);
   updateInterval = setInterval(() => {
     void updateTrayTemperature();
   }, updateIntervalMs);
 }
 
-// Предотвращаем автоматическое закрытие приложения при закрытии всех окон
-// Нам нужен только трей, окна не обязательны
+// Prevent automatic app shutdown when all windows are closed
+// Only the tray is required; windows are optional
 app.on("window-all-closed", () => {
-  // Не закрываем приложение, так как у нас есть трей
-  // app.quit() будет вызван только явно через меню "Quit"
+  // Keep the app open while the tray exists
+  // app.quit() is called only explicitly through the "Quit" menu
 });
 
-// Обеспечиваем, что только один экземпляр приложения может быть запущен (если включено)
+// Ensure only one app instance can run (if enabled)
 if (ALLOW_ONLY_ONE_INSTANCE) {
   const gotTheLock = app.requestSingleInstanceLock();
 
   if (!gotTheLock) {
-    // Если другой экземпляр уже запущен, закрываем этот
+    // If another instance is already running, close this one
     app.quit();
   } else {
-    // Обрабатываем попытку запуска второго экземпляра
+    // Handle an attempt to launch a second instance
     app.on('second-instance', () => {
-      // Если пользователь пытается запустить второй экземпляр, показываем существующие окна
+      // If the user tries to launch a second instance, show the existing windows
       const windows = [settingsWindow, weatherWindow, requestWindow, errorWindow, helpWindow];
       for (const window of windows) {
         if (window && !window.isDestroyed()) {
           if (window.isMinimized()) window.restore();
           window.show();
           window.focus();
-          break; // Показываем только первое доступное окно
+          break; // Show only the first available window
         }
       }
     });
 
     app.whenReady().then(async () => {
-      // Инициализируем кэш цветных emoji перед созданием трея
+      // Initialize the color emoji cache before creating the tray
       await initializeEmojiCache();
-      // Отключаем создание окна — нам нужен только трей.
+      // Do not create a window; only the tray is needed.
       await createTray();
     });
   }
 } else {
-  // Если разрешено несколько экземпляров, запускаем приложение без проверки блокировки
+  // If multiple instances are allowed, launch without checking the lock
   app.whenReady().then(async () => {
-    // Инициализируем кэш цветных emoji перед созданием трея
+    // Initialize the color emoji cache before creating the tray
     await initializeEmojiCache();
-    // Отключаем создание окна — нам нужен только трей.
+    // Do not create a window; only the tray is needed.
     await createTray();
   });
 }
