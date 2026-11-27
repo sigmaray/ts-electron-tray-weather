@@ -1411,39 +1411,24 @@ async function showWeatherDetails(): Promise<void> {
     return "Very humid";
   };
   
-  const formatTime = (timeStr: string): string => {
-    // Keep the time in the format returned by the API
-    // Add the timezone and UTC offset
-    if (weatherData.timezone !== undefined) {
-      // For OpenWeatherMap, timezone is a number (offset in seconds)
-      // For Open-Meteo, timezone is a string (the timezone name)
-      let timezoneDisplay = "";
-      let utcOffset = "";
-      
-      if (typeof weatherData.timezone === "number") {
-        // OpenWeatherMap: timezone is an offset in seconds
-        const offsetSeconds = weatherData.timezone;
-        const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
-        const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
-        const sign = offsetSeconds >= 0 ? "+" : "-";
-        utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-        timezoneDisplay = utcOffset;
-      } else if (typeof weatherData.timezone === "string") {
-        // Open-Meteo: timezone is the timezone name
-        timezoneDisplay = weatherData.timezone;
-        if (weatherData.utc_offset_seconds !== undefined) {
-          const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
-          const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
-          const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
-          utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-        }
-      }
-      
-      return `${timeStr} (${timezoneDisplay}${utcOffset && typeof weatherData.timezone === "string" ? `, ${utcOffset}` : ""})`;
-    }
-    
-    return timeStr;
+  const getTimezoneSuffix = (): string => {
+    const offsetSeconds = typeof weatherData.timezone === "number"
+      ? weatherData.timezone
+      : weatherData.utc_offset_seconds;
+    if (offsetSeconds === undefined) return "";
+    const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
+    const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
+    const sign = offsetSeconds >= 0 ? "+" : "-";
+    return ` (UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")})`;
   };
+
+  const formatDateTime = (value: string): string => {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/);
+    if (!match) return `${escapeHtml(value)}${getTimezoneSuffix()}`;
+    return `${match[1]}<br>${match[2]}:${match[3] ?? "00"}${getTimezoneSuffix()}`;
+  };
+
+  const formatTime = (timeStr: string): string => formatDateTime(timeStr);
   
   const calculateDaylight = (sunrise: string, sunset: string): string => {
     const rise = new Date(sunrise);
@@ -1454,38 +1439,7 @@ async function showWeatherDetails(): Promise<void> {
     return `${hours}:${minutes.toString().padStart(2, "0")}`;
   };
   
-  // Keep the time in the format returned by the API
-  const timeStr = weatherData.current.time;
-  
-  // Format timezone and UTC offset information
-  let timezoneInfo = "";
-  if (weatherData.timezone !== undefined) {
-    // For OpenWeatherMap, timezone is a number (offset in seconds)
-    // For Open-Meteo, timezone is a string (the timezone name)
-    let timezoneDisplay = "";
-    let utcOffset = "";
-    
-    if (typeof weatherData.timezone === "number") {
-      // OpenWeatherMap: timezone is an offset in seconds
-      const offsetSeconds = weatherData.timezone;
-      const hours = Math.floor(Math.abs(offsetSeconds) / 3600);
-      const minutes = Math.floor((Math.abs(offsetSeconds) % 3600) / 60);
-      const sign = offsetSeconds >= 0 ? "+" : "-";
-      utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-      timezoneDisplay = utcOffset;
-    } else if (typeof weatherData.timezone === "string") {
-      // Open-Meteo: timezone is the timezone name
-      timezoneDisplay = weatherData.timezone;
-      if (weatherData.utc_offset_seconds !== undefined) {
-        const hours = Math.floor(Math.abs(weatherData.utc_offset_seconds) / 3600);
-        const minutes = Math.floor((Math.abs(weatherData.utc_offset_seconds) % 3600) / 60);
-        const sign = weatherData.utc_offset_seconds >= 0 ? "+" : "-";
-        utcOffset = `UTC${sign}${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-      }
-    }
-    
-    timezoneInfo = ` (${timezoneDisplay}${utcOffset && typeof weatherData.timezone === "string" ? `, ${utcOffset}` : ""})`;
-  }
+  const timeStr = formatDateTime(weatherData.current.time);
 
 
   const html = `
@@ -1805,13 +1759,13 @@ async function showWeatherDetails(): Promise<void> {
             ` : ''}
             <div class="current-detail-item">
               <div class="current-detail-label">Update time</div>
-              <div class="current-detail-value">${timeStr}${timezoneInfo}</div>
+              <div class="current-detail-value">${timeStr}</div>
             </div>
           </div>
         </div>
         
         <div class="update-time">
-          Data updated: ${timeStr}${timezoneInfo}
+          Data updated: ${timeStr}
         </div>
       </div>
     </body>
