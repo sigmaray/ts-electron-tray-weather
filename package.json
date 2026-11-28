@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "build:electron": "electron-builder --publish never",
     "test": "playwright test",
-    "test:unit": "npm run build && node --test tests/unit/*.test.cjs",
+    "test:unit": "npm run build && node --test tests/unit/settings.test.cjs tests/unit/settings-ipc.test.cjs tests/unit/request-history.test.cjs",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed"
   },
