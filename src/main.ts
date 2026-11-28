@@ -864,7 +864,7 @@ function showSettings(): void {
           }
 
           // Send settings to the main process for validation and saving
-          (window as any).weatherSettings.save(newSettings).then((result: { ok: boolean; errors?: string[] }) => {
+          window.weatherSettings.save(newSettings).then((result) => {
             if (!result.ok) showValidationErrors(result.errors || ['Could not save settings']);
           }).catch(() => showValidationErrors(['Could not save settings']));
         });

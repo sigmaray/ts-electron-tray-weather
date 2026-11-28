@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings } from './helpers';
+import { launchElectronApp, waitForWindow, removeTestSettings, createTestSettings, loadTestSettings } from './helpers';
 
 test.describe('Settings window tests', () => {
   let electronApp: any;
@@ -104,6 +104,18 @@ test.describe('Settings window tests', () => {
     expect(rendererState.saveType).toBe('function');
     expect(rendererState.saveResult.ok).toBe(false);
     expect(rendererState.saveResult.errors).toContain('Latitude must be between -90 and 90');
+
+    await settingsWindow!.fill('#city', 'Berlin');
+    await settingsWindow!.fill('#country', 'Germany');
+    await settingsWindow!.fill('#updateInterval', '300');
+    await settingsWindow!.locator('#saveBtn').click({ noWaitAfter: true });
+    await expect.poll(() => settingsWindow!.isClosed()).toBe(true);
+    expect(loadTestSettings()).toMatchObject({
+      city: 'Berlin',
+      country: 'Germany',
+      updateIntervalInSeconds: 300,
+      apiProvider: 'open-meteo',
+    });
   });
 });
 
