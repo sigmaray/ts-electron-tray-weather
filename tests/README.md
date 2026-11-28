@@ -10,6 +10,9 @@ This directory contains Playwright tests for the Electron Weather App.
 - `weather-data.test.ts` — weather data retrieval and display tests
 - `help-window.test.ts` — help window tests
 - `data-display.test.ts` — data display checks
+- `unit/settings.test.cjs` — settings validation, storage, and migration
+- `unit/settings-ipc.test.cjs` — settings IPC validation and sender trust
+- `unit/request-history.test.cjs` — bounded request history
 
 ## Run the tests
 
@@ -31,6 +34,9 @@ npm run test:headed
 
 # Run a specific test
 npm test -- tests/app.test.ts
+
+# Run fast unit tests (no Electron window required)
+npm run test:unit
 ```
 
 ## What is tested
@@ -53,6 +59,7 @@ npm test -- tests/app.test.ts
 
 ## Notes
 
-- Tests use a temporary `settings.test.json` file to isolate test data.
+- Playwright suites that create `settings.test.json` remove it in `afterEach`; helper functions alone do not manage lifecycle.
+- Unit tests use temporary directories and remove them with Node's test cleanup hook.
 - Some tests may require a GUI environment for full functionality.
 - Tests automatically remove temporary files after running.

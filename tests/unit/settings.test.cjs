@@ -55,3 +55,13 @@ test('validates coordinates, provider keys, and malformed payloads', () => {
   assert.equal(validateSettings(null, current).valid, false);
   assert.equal(validateSettings({ city: 'Paris', country: 'France', unexpected: true }, current).valid, false);
 });
+
+test('saves settings asynchronously with a complete JSON file', async t => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const store = createSettingsStore(f.paths);
+  const settings = { ...defaultSettings(), city: 'Paris', country: 'France' };
+  assert.equal(await store.save(settings), true);
+  assert.deepEqual(JSON.parse(await fs.promises.readFile(store.getPath(), 'utf8')), settings);
+  assert.deepEqual((await fs.promises.readdir(f.paths.userDataPath)).filter(name => name.endsWith('.tmp')), []);
+});

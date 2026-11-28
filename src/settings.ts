@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 
 export interface Settings {
   city?: string;
@@ -123,7 +124,8 @@ export function createSettingsStore(paths: SettingsStorePaths) {
       try {
         if (!fs.existsSync(target)) {
           const defaults = defaultSettings();
-          this.save(defaults);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, JSON.stringify(defaults, null, 2), 'utf8');
           return defaults;
         }
         const value: unknown = JSON.parse(fs.readFileSync(target, 'utf8'));
@@ -147,20 +149,27 @@ export function createSettingsStore(paths: SettingsStorePaths) {
         return defaultSettings();
       }
     },
-    save(settings: Settings): boolean {
+    async save(settings: Settings): Promise<boolean> {
       let target = resolvePath();
-      const write = (file: string) => {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify(settings, null, 2), 'utf8');
+      const write = async (file: string) => {
+        await fs.promises.mkdir(path.dirname(file), { recursive: true });
+        const temporary = `${file}.${randomUUID()}.tmp`;
+        try {
+          await fs.promises.writeFile(temporary, JSON.stringify(settings, null, 2), 'utf8');
+          await fs.promises.rename(temporary, file);
+        } catch (error) {
+          await fs.promises.rm(temporary, { force: true }).catch(() => undefined);
+          throw error;
+        }
       };
       try {
-        write(target);
+        await write(target);
         return true;
       } catch (error) {
         console.error(`[settings] Could not save ${target}`, error);
         if (!paths.overridePath && target !== userDataFile) {
           try {
-            write(userDataFile);
+            await write(userDataFile);
             fallbackPath = userDataFile;
             console.warn(`[settings] Saved settings to userData fallback ${userDataFile}`);
             return true;

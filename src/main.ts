@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { createSettingsStore, Settings } from "./settings";
 import { registerSettingsSaveHandler } from "./settings-ipc";
+import { createRequestHistory } from "./request-history";
 
 const isMac = os.platform() === "darwin";
 const isWindows = os.platform() === "win32";
@@ -74,19 +75,8 @@ const apiErrors: ApiError[] = [];
 const MAX_ERRORS = 100;
 
 // Array storing the 100 most recent API requests
-interface ApiRequest {
-  timestamp: Date;
-  api: string; // API name (weather, geocoding, etc.)
-  url: string; // request URL
-  method: string; // HTTP method (GET, POST, etc.)
-  requestHeaders?: Record<string, string>; // Request headers
-  responseStatus?: number; // HTTP response status code
-  responseHeaders?: Record<string, string>; // Response headers
-  responseBody?: string; // Response body (JSON string)
-  duration?: number; // Request duration in ms
-}
-
-const apiRequests: ApiRequest[] = [];
+const requestHistory = createRequestHistory();
+const apiRequests = requestHistory.entries;
 const MAX_REQUESTS = 100;
 
 // References to open windows (to prevent duplicates)
@@ -113,8 +103,9 @@ function extractErrorDetails(err: unknown): {
     let details: string | undefined;
 
     // Check for a Node.js error code (ENOTFOUND, ECONNREFUSED, etc.)
-    if ((err as any).code) {
-      errorCode = (err as any).code;
+    const codedError = err as NodeJS.ErrnoException;
+    if (typeof codedError.code === 'string') {
+      errorCode = codedError.code;
     }
 
     // Check for an HTTP status code
@@ -132,8 +123,8 @@ function extractErrorDetails(err: unknown): {
     }
 
     // If a cause property exists, include it in the details
-    if ((err as any).cause) {
-      const cause = (err as any).cause;
+    if (err.cause !== undefined) {
+      const cause = err.cause;
       if (details) {
         details += `\nCause: ${cause instanceof Error ? cause.message : String(cause)}`;
       } else {
@@ -183,8 +174,7 @@ function addApiError(api: string, error: string | Error, url?: string, additiona
  * Add a request to the recent requests history
  */
 function addApiRequest(api: string, url: string, method: string, requestHeaders?: Record<string, string>, responseStatus?: number, responseHeaders?: Record<string, string>, responseBody?: string, duration?: number): void {
-  const apiRequest: ApiRequest = {
-    timestamp: new Date(),
+  requestHistory.add({
     api,
     url,
     method,
@@ -193,14 +183,7 @@ function addApiRequest(api: string, url: string, method: string, requestHeaders?
     responseHeaders,
     responseBody,
     duration,
-  };
-  
-  apiRequests.push(apiRequest);
-  
-  // Limit the number of requests to MAX_REQUESTS
-  if (apiRequests.length > MAX_REQUESTS) {
-    apiRequests.shift(); // Remove the oldest request
-  }
+  });
   
   console.log(`[${api}] Request added to history: ${method} ${url} (${responseStatus || 'N/A'})`);
 }
@@ -234,7 +217,7 @@ function isUrl(text: string): boolean {
 /**
  * Save settings to settings.json
  */
-function saveSettings(newSettings: Settings): boolean {
+async function saveSettings(newSettings: Settings): Promise<boolean> {
   return settingsStore.save(newSettings);
 }
 
@@ -284,7 +267,7 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
   }
 
   // Save to file
-  if (!saveSettings(mergedSettings)) {
+  if (!await saveSettings(mergedSettings)) {
     // Roll back changes if saving fails
     CITY = previousCity;
     COUNTRY = previousCountry;
@@ -316,7 +299,7 @@ async function applySettings(newSettings: Settings): Promise<boolean> {
     API_KEY = previousApiKey;
     settings = previousSettings;
     // Restore the file with the previous settings
-    saveSettings(previousSettings);
+    await saveSettings(previousSettings);
     // Do not reinitialize the location; keep the current state
     // The app will continue using the previous settings
     console.log("Changes rolled back. The app continues running with the previous settings.");
